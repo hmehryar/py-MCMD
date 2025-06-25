@@ -1,4 +1,4 @@
-{"total_cycles_namd_gomc_sims": 300,
+{"total_cycles_namd_gomc_sims": 10,
 "starting_at_cycle_namd_gomc_sims": 0,
 "gomc_use_CPU_or_GPU": "CPU" ,
 "simulation_type": "NPT",
