@@ -45,6 +45,19 @@ class SimulationConfig(BaseModel):
     namd2_bin_directory: str
     gomc_bin_directory: str
 
+
+     # ---- tolerances (with defaults) ----
+    allowable_error_fraction_vdw_plus_elec: float = Field(5e-3, ge=0)
+    allowable_error_fraction_potential: float = Field(5e-3, ge=0)
+    max_absolute_allowable_kcal_fraction_vdw_plus_elec: float = Field(0.5, ge=0)
+
+    # ---- engine step params (initialized later) ----
+    gomc_console_blkavg_hist_steps: int = 0
+    gomc_rst_coor_ckpoint_steps: int = 0
+    gomc_hist_sample_steps: int = 0
+    namd_rst_dcd_xst_steps: int = 0
+    namd_console_blkavg_e_and_p_steps: int = 0
+
     # Pydantic v2 configuration
     model_config = ConfigDict(
         populate_by_name=True,
@@ -119,6 +132,18 @@ class SimulationConfig(BaseModel):
             )
 
         return self
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        # Derive the per-engine step parameters from run steps
+        gsteps = int(self.gomc_run_steps)
+        nsteps = int(self.namd_run_steps)
+
+        object.__setattr__(self, "gomc_console_blkavg_hist_steps", gsteps)
+        object.__setattr__(self, "gomc_rst_coor_ckpoint_steps", gsteps)
+        object.__setattr__(self, "gomc_hist_sample_steps", min(500, int(gsteps / 10)))
+        object.__setattr__(self, "namd_rst_dcd_xst_steps", nsteps)
+        object.__setattr__(self, "namd_console_blkavg_e_and_p_steps", nsteps)
 
 
 def load_simulation_config(path: str) -> SimulationConfig:

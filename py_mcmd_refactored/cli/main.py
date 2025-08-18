@@ -1,17 +1,21 @@
 # py_mcmd/cli/main.py
 
 import argparse
+import json
 import os
 import sys
 import logging
+from pprint import pprint  # pretty-print the object
+
 
 sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 
 
 
+# from  config.models import load_simulation_config
+# from orchestrator.manager import SimulationOrchestrator
 from config.models import load_simulation_config
 from orchestrator.manager import SimulationOrchestrator
-
 
 # *************************************************
 # The python arguments that need to be selected to run the simulations (start)
@@ -90,17 +94,27 @@ def main():
     args = parse_args()
     # logging setup
     level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s %(levelname)-8s %(name)s: %(message)s")
+    logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    force=True  # <--- this resets any prior config
+    )
+    # load + validate config
+    try:
+        cfg = load_simulation_config(args.file)
+        logging.info("Loaded simulation config from %s", args.file)
+        # Print the full config object
+        logging.info("=== SimulationConfig Object ===\n")
+        logging.info(cfg.model_dump())  # pretty print Pydantic model as dict
+        logging.info("=== End of SimulationConfig Object ===\n")
+    except Exception as e:
+        logging.error("Failed to load config: %s", e)
+        sys.exit(1)
 
-    # # load + validate config
-    # try:
-    #     cfg = load_simulation_config(args.config)
-    # except Exception as e:
-    #     logging.error("Failed to load config: %s", e)
-    #     sys.exit(1)
+    # hand off to the orchestrator
+    sim = SimulationOrchestrator(cfg)
+    logging.info("Configuration loaded and orchestrator constructed successfully.")
 
-    # # hand off to the orchestrator
-    # sim = SimulationOrchestrator(cfg)
     # sim.run()  # or sim.execute_cycles()
 
 if __name__ == "__main__":
