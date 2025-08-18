@@ -124,3 +124,21 @@ def test_load_from_json_constructor_logic(tmp_path: Path):
     cfg = load_simulation_config(str(json_path))
     assert cfg.gomc_run_steps == 6000
     assert cfg.gomc_hist_sample_steps == 500
+
+def test_run_dir_defaults_and_override(tmp_path):
+    from py_mcmd_refactored.config.models import load_simulation_config
+
+    # defaults
+    cfg1 = make_cfg()
+    assert cfg1.path_namd_runs == "NAMD"
+    assert cfg1.path_gomc_runs == "GOMC"
+
+    # json override
+    data = make_cfg().model_dump()
+    data["path_namd_runs"] = "NAMD_TEST"
+    data["path_gomc_runs"] = "GOMC_TEST"
+    p = tmp_path / "user_input.json"
+    p.write_text(json.dumps(data))
+    cfg2 = load_simulation_config(str(p))
+    assert cfg2.path_namd_runs == "NAMD_TEST"
+    assert cfg2.path_gomc_runs == "GOMC_TEST"
