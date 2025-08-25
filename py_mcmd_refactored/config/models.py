@@ -45,6 +45,13 @@ class SimulationConfig(BaseModel):
     namd2_bin_directory: str
     gomc_bin_directory: str
 
+    # run directory roots (overridable from JSON if needed)
+    path_namd_runs: str = Field("NAMD")
+    path_gomc_runs: str = Field("GOMC")
+
+    # Make these truly optional so we can detect “missing”
+    path_namd_template: Optional[str] = Field(default=None)
+    path_gomc_template: Optional[str] = Field(default=None)
 
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
@@ -114,6 +121,20 @@ class SimulationConfig(BaseModel):
             )
 
         return self
+
+    @model_validator(mode="after")
+    def _derive_template_paths_when_missing(self):
+        # Only fill in defaults if user did NOT supply a value
+        if self.path_namd_template is None:
+            self.path_namd_template = "required_data/config_files/NAMD.conf"
+
+        if self.path_gomc_template is None:
+            # derive from simulation_type only if not provided
+            self.path_gomc_template = (
+                f"required_data/config_files/GOMC_{self.simulation_type}.conf"
+            )
+        return self
+
     def __init__(self, **data):
         super().__init__(**data)
 
@@ -121,14 +142,13 @@ class SimulationConfig(BaseModel):
         gsteps = int(self.gomc_run_steps)
         nsteps = int(self.namd_run_steps)
 
+        # Tolerances
         object.__setattr__(self, "gomc_console_blkavg_hist_steps", gsteps)
         object.__setattr__(self, "gomc_rst_coor_ckpoint_steps", gsteps)
         object.__setattr__(self, "gomc_hist_sample_steps", min(500, int(gsteps / 10)))
         object.__setattr__(self, "namd_rst_dcd_xst_steps", nsteps)
         object.__setattr__(self, "namd_console_blkavg_e_and_p_steps", nsteps)
     
-    
-
      # ---- tolerances (with defaults) ----
     allowable_error_fraction_vdw_plus_elec: float = Field(5e-3, ge=0)
     allowable_error_fraction_potential: float = Field(5e-3, ge=0)
@@ -146,11 +166,6 @@ class SimulationConfig(BaseModel):
         populate_by_name=True,
         extra="forbid"
     )
-
-    # run directory roots (overridable from JSON if needed)
-    path_namd_runs: str = Field("NAMD")
-    path_gomc_runs: str = Field("GOMC")
-
 
 def load_simulation_config(path: str) -> SimulationConfig:
     """

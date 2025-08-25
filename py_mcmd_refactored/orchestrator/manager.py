@@ -34,7 +34,7 @@ class SimulationOrchestrator:
         # NEW: ensure run directories exist (and warn if stale)
         self._prepare_run_dirs()
 
-        logger.info(
+        self.logger.info(
             "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s",
             self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run
         )
@@ -45,12 +45,12 @@ class SimulationOrchestrator:
 
         # Mirror the legacy warnings
         if os.path.isdir(namd_root) or os.path.isdir(gomc_root):
-            logger.warning(
+            self.logger.warning(
                 "INFORMATION: if the system fails to start (with errors) from the beginning of a simulation, "
                 "you may need to delete the main GOMC and NAMD folders. The failure to start/restart may be "
                 "caused by the last simulation not finishing correctly."
             )
-            logger.warning(
+            self.logger.warning(
                 "INFORMATION: If the system fails to restart a previous run (with errors), you may need to "
                 "delete the last subfolders under the main NAMD and GOMC (e.g., NAMD=00000000_a or GOMC=00000001). "
                 "The failure to start/restart may be caused by the last simulation not finishing properly."

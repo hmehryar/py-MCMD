@@ -142,3 +142,27 @@ def test_run_dir_defaults_and_override(tmp_path):
     cfg2 = load_simulation_config(str(p))
     assert cfg2.path_namd_runs == "NAMD_TEST"
     assert cfg2.path_gomc_runs == "GOMC_TEST"
+
+def test_template_paths_derived_and_overridable(tmp_path):
+    # default derivation from simulation_type
+    cfg = make_cfg(simulation_type="NPT")
+    assert cfg.path_namd_template == "required_data/config_files/NAMD.conf"
+    assert cfg.path_gomc_template == "required_data/config_files/GOMC_NPT.conf"
+
+    # JSON override still respected
+    data = make_cfg(simulation_type="NVT").model_dump()
+    data["path_namd_template"] = "custom/NAMD_custom.conf"
+    data["path_gomc_template"] = "custom/GOMC_custom.conf"
+    p = tmp_path / "user_input.json"
+    p.write_text(json.dumps(data))
+    cfg2 = load_simulation_config(str(p))
+    assert cfg2.path_namd_template == "custom/NAMD_custom.conf"
+    assert cfg2.path_gomc_template == "custom/GOMC_custom.conf"
+
+def test_template_paths_only_derived_when_missing():
+    data = make_cfg(simulation_type="NVT").model_dump()
+    data["path_namd_template"] = None
+    data["path_gomc_template"] = None
+    cfg = SimulationConfig(**data)
+    assert cfg.path_namd_template == "required_data/config_files/NAMD.conf"
+    assert cfg.path_gomc_template == "required_data/config_files/GOMC_NVT.conf"
