@@ -36,8 +36,11 @@ class SimulationConfig(BaseModel):
     set_dims_box_1_list: List[Optional[float]]
     set_angle_box_0_list: List[Optional[int]]
     set_angle_box_1_list: List[Optional[int]]
+    
+    # Force-field file lists (must be list[str])    
     starting_ff_file_list_gomc: List[str]
     starting_ff_file_list_namd: List[str]
+
     starting_pdb_box_0_file: str
     starting_psf_box_0_file: str
     starting_pdb_box_1_file: Optional[str]
@@ -135,6 +138,20 @@ class SimulationConfig(BaseModel):
             )
         return self
 
+    @field_validator("starting_ff_file_list_gomc", "starting_ff_file_list_namd", mode="after")
+    @classmethod
+    def _ensure_list_of_strings(cls, v: List[str], info):
+        field = info.field_name
+        if not isinstance(v, list):
+            raise TypeError(
+                f"ERROR: The {field} must be provided as a list of strings."
+            )
+        for i, item in enumerate(v):
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"ERROR: The {field} must be a list of strings (item {i} is {type(item).__name__})."
+                )
+        return v
     def __init__(self, **data):
         super().__init__(**data)
 

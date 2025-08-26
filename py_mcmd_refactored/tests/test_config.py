@@ -4,6 +4,8 @@ sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 import pytest
 from pathlib import Path
 import json
+from pydantic import ValidationError
+
 
 from config.models import load_simulation_config, SimulationConfig
 # ---- helpers ----
@@ -166,3 +168,19 @@ def test_template_paths_only_derived_when_missing():
     cfg = SimulationConfig(**data)
     assert cfg.path_namd_template == "required_data/config_files/NAMD.conf"
     assert cfg.path_gomc_template == "required_data/config_files/GOMC_NVT.conf"
+
+def test_ff_lists_accept_valid_strings():
+    cfg = make_cfg(
+        starting_ff_file_list_gomc=["a.inp", "b.inp"],
+        starting_ff_file_list_namd=["c.inp"]
+    )
+    assert cfg.starting_ff_file_list_gomc == ["a.inp", "b.inp"]
+    assert cfg.starting_ff_file_list_namd == ["c.inp"]
+
+def test_ff_lists_reject_non_list():
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(starting_ff_file_list_gomc="not-a-list")
+
+def test_ff_lists_reject_non_string_items():
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(starting_ff_file_list_namd=["ok.inp", 123])
