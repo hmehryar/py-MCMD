@@ -6,6 +6,7 @@ from config.models import SimulationConfig
 # from engines.namd_engine import NAMDEngine
 # from engines.gomc_engine import GOMCEngine
 from engines.base import Engine
+from engines.gomc_engine import GomcEngine
 class SimulationOrchestrator:
     # def __init__(self, cfg: SimulationConfig):
     #     self.cfg = cfg
@@ -21,7 +22,7 @@ class SimulationOrchestrator:
         self.dry_run = dry_run
 
         self.namd = Engine(cfg, "NAMD")
-        self.gomc = Engine(cfg, "GOMC")
+        self.gomc = GomcEngine(cfg, "GOMC")
 
         self.total_cycles = int(getattr(cfg, "total_cycles_namd_gomc_sims", 0))
         self.start_cycle = int(getattr(cfg, "starting_at_cycle_namd_gomc_sims", 0))
@@ -46,12 +47,12 @@ class SimulationOrchestrator:
         # Mirror the legacy warnings
         if os.path.isdir(namd_root) or os.path.isdir(gomc_root):
             self.logger.warning(
-                "INFORMATION: if the system fails to start (with errors) from the beginning of a simulation, "
+                "\n\tINFORMATION: if the system fails to start (with errors) from the beginning of a simulation, "
                 "you may need to delete the main GOMC and NAMD folders. The failure to start/restart may be "
                 "caused by the last simulation not finishing correctly."
             )
             self.logger.warning(
-                "INFORMATION: If the system fails to restart a previous run (with errors), you may need to "
+                "\n\tINFORMATION: If the system fails to restart a previous run (with errors), you may need to "
                 "delete the last subfolders under the main NAMD and GOMC (e.g., NAMD=00000000_a or GOMC=00000001). "
                 "The failure to start/restart may be caused by the last simulation not finishing properly."
             )

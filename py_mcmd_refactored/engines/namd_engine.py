@@ -1,7 +1,9 @@
-class NamdEngine:
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.namd_template = self.cfg.path_namd_template
+import logging
+from engines.base import Engine as BaseEngine
+logger = logging.getLogger(__name__)
+class NamdEngine(BaseEngine):
+    def __init__(self, cfg, engine_type="NAMD"):
+        super().__init__(cfg, engine_type)
         # ... use namd_template when generating the per-cycle NAMD input ...
 
     def run(self):

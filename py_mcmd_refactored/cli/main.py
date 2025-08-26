@@ -103,10 +103,6 @@ def main():
     try:
         cfg = load_simulation_config(args.file)
         logging.info("Loaded simulation config from %s", args.file)
-        # Print the full config object
-        logging.info("=== SimulationConfig Object ===\n")
-        logging.info(cfg.model_dump())  # pretty print Pydantic model as dict
-        logging.info("=== End of SimulationConfig Object ===\n")
     except Exception as e:
         logging.error("Failed to load config: %s", e)
         sys.exit(1)

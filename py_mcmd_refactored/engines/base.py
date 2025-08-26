@@ -34,13 +34,15 @@ class Engine:
         # Binary path
         if self.engine_type == "NAMD":
             self.bin_dir = Path(cfg.namd2_bin_directory)
+            self.path_template = Path(cfg.path_namd_template) if cfg.path_namd_template else None
         elif self.engine_type == "GOMC":
             self.bin_dir = Path(cfg.gomc_bin_directory)
+            self.path_template = Path(cfg.path_gomc_template) if cfg.path_gomc_template else None
         else:
             raise ValueError(f"Unknown engine_type {engine_type}")
 
         logger.info(
-            f"[{self.engine_type}] initialized with run_dir={self.run_dir}, bin_dir={self.bin_dir}"
+            f"\n\t[{self.engine_type}] initialized with\n\t\trun_dir={self.run_dir},\n\t\tbin_dir={self.bin_dir},\n\t\tpath_template={self.path_template}"
         )
 
     def run(self):
