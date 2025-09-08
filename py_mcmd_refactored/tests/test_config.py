@@ -184,3 +184,44 @@ def test_ff_lists_reject_non_list():
 def test_ff_lists_reject_non_string_items():
     with pytest.raises((ValidationError, TypeError)):
         make_cfg(starting_ff_file_list_namd=["ok.inp", 123])
+
+def test_gcmc_requires_fields_and_types():
+    # Missing dict
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="ChemPot",
+                 GCMC_ChemPot_or_Fugacity_dict=None)
+
+    # Bad dict types
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="ChemPot",
+                 GCMC_ChemPot_or_Fugacity_dict={"TIP3": "not-a-number"})
+
+    # Bad key type
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="ChemPot",
+                 GCMC_ChemPot_or_Fugacity_dict={1: -1000})
+
+def test_gcmc_fugacity_requires_non_negative():
+    with pytest.raises((ValidationError, ValueError)):
+        make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="Fugacity",
+                 GCMC_ChemPot_or_Fugacity_dict={"WAT": -0.1})
+
+    # OK: Fugacity with non-negative values
+    cfg = make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="Fugacity",
+                   GCMC_ChemPot_or_Fugacity_dict={"WAT": 0.0})
+    assert cfg.GCMC_ChemPot_or_Fugacity_dict["WAT"] == 0.0
+
+def test_npt_pressure_required_and_non_negative():
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(simulation_type="NPT", simulation_pressure_bar=None)
+    with pytest.raises((ValidationError, ValueError)):
+        make_cfg(simulation_type="NPT", simulation_pressure_bar=-1.0)
+
+    cfg = make_cfg(simulation_type="NPT", simulation_pressure_bar=0.0)
+    assert cfg.simulation_pressure_bar == 0.0
+
+def test_non_npt_pressure_defaults_to_atmospheric():
+    cfg = make_cfg(simulation_type="NVT", simulation_pressure_bar=None)
+    assert cfg.simulation_pressure_bar == 1.01325
+    cfg2 = make_cfg(simulation_type="GEMC", simulation_pressure_bar=None)
+    assert cfg2.simulation_pressure_bar == 1.01325

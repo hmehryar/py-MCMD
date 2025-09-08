@@ -26,9 +26,9 @@ class SimulationConfig(BaseModel):
     no_core_box_0: int = Field(..., ge=0)
     no_core_box_1: int = Field(..., ge=0)
     simulation_temp_k: float = Field(..., gt=0)
-    simulation_pressure_bar: Optional[float] = Field(..., ge=0)
-    GCMC_ChemPot_or_Fugacity: Optional[Literal["ChemPot", "Fugacity"]]
-    GCMC_ChemPot_or_Fugacity_dict: Optional[Dict[str, float]]
+    simulation_pressure_bar: Optional[float] = None
+    GCMC_ChemPot_or_Fugacity:  Optional[Literal["ChemPot", "Fugacity"]] = None
+    GCMC_ChemPot_or_Fugacity_dict: Optional[Dict[str, float]] = None
     namd_minimize_mult_scalar: int = Field(..., ge=0)
     namd_run_steps: int = Field(..., ge=0)
     gomc_run_steps: int = Field(..., ge=0)
@@ -78,6 +78,23 @@ class SimulationConfig(BaseModel):
                 raise ValueError("All angles must be 90 or None")
         return v
 
+    @field_validator("GCMC_ChemPot_or_Fugacity_dict")
+    @classmethod
+    def _gcmc_dict_type(cls, v, info):
+        field = info.field_name
+        # Allow None when not GCMC; deeper checks happen in model-level validator
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            raise TypeError(f"ERROR: {field} must be a dictionary when using GCMC.")
+        # keys must be str, values must be int/float
+        for k, val in v.items():
+            if not isinstance(k, str):
+                raise TypeError(f"The {field} keys must be a string.")
+            if not isinstance(val, (int, float)):
+                raise TypeError(f"The {field} values must be an integer or float.")
+        return v
+    
     @model_validator(mode='after')
     def cross_field_validations(self):
         # Alias model fields to local variables
@@ -152,6 +169,47 @@ class SimulationConfig(BaseModel):
                     f"ERROR: The {field} must be a list of strings (item {i} is {type(item).__name__})."
                 )
         return v
+    @model_validator(mode="after")
+    def _ensemble_consistency(self):
+        # --- GCMC-only checks ---
+        if self.simulation_type == "GCMC":
+            if self.GCMC_ChemPot_or_Fugacity_dict is None:
+                raise TypeError(
+                    "ERROR: enter the chemical potential or fugacity data (GCMC_ChemPot_or_Fugacity_dict) "
+                    "as a dictionary when using the GCMC ensemble."
+                )
+            if self.GCMC_ChemPot_or_Fugacity is None:
+                raise ValueError(
+                    "The GCMC_ChemPot_or_Fugacity cannot be None when running the GCMC ensemble."
+                )
+            # If Fugacity, all values must be >= 0
+            if self.GCMC_ChemPot_or_Fugacity == "Fugacity":
+                for k, val in self.GCMC_ChemPot_or_Fugacity_dict.items():
+                    if val < 0:
+                        raise ValueError(
+                            "When using Fugacity, GCMC_ChemPot_or_Fugacity_dict values must be >= 0."
+                        )
+        else:
+            # Non-GCMC: allow these to be unset
+            # (We do not auto-clear them to preserve round-tripping of configs.)
+            pass
+
+        # --- Pressure logic ---
+        if self.simulation_type == "NPT":
+            if not isinstance(self.simulation_pressure_bar, (int, float)):
+                raise TypeError(
+                    "The simulation pressure needs to be set for the NPT simulation type (int or float)."
+                )
+            if self.simulation_pressure_bar < 0:
+                raise ValueError(
+                    "The simulation pressure must be >= 0 bar for the NPT simulation type."
+                )
+        else:
+            # Set to atmospheric (not used but required numerically by some paths)
+            if self.simulation_pressure_bar is None:
+                self.simulation_pressure_bar = 1.01325
+
+        return self
     def __init__(self, **data):
         super().__init__(**data)
 
