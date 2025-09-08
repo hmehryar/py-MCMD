@@ -225,3 +225,15 @@ def test_non_npt_pressure_defaults_to_atmospheric():
     assert cfg.simulation_pressure_bar == 1.01325
     cfg2 = make_cfg(simulation_type="GEMC", simulation_pressure_bar=None)
     assert cfg2.simulation_pressure_bar == 1.01325
+
+def test_minimize_steps_derivation():
+    cfg = make_cfg(namd_run_steps=200, namd_minimize_mult_scalar=3)
+    assert cfg.namd_minimize_steps == 600
+
+def test_log_dir_default(tmp_path, monkeypatch):
+    # ensure orchestrator creates logs/<file>
+    from py_mcmd_refactored.orchestrator.manager import SimulationOrchestrator
+    cfg = make_cfg()
+    cfg.log_dir = str(tmp_path / "logs_test")
+    orch = SimulationOrchestrator(cfg, dry_run=True)
+    assert (tmp_path / "logs_test" / f"NAMD_GOMC_started_at_cycle_No_{cfg.starting_at_cycle_namd_gomc_sims}.log").exists()

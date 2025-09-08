@@ -56,6 +56,13 @@ class SimulationConfig(BaseModel):
     path_namd_template: Optional[str] = Field(default=None)
     path_gomc_template: Optional[str] = Field(default=None)
 
+    
+    # Logging
+    log_dir: str = Field("logs")  # can override in JSON
+
+    namd_minimize_steps: int = 0
+
+
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
         if v is None:
@@ -223,6 +230,10 @@ class SimulationConfig(BaseModel):
         object.__setattr__(self, "gomc_hist_sample_steps", min(500, int(gsteps / 10)))
         object.__setattr__(self, "namd_rst_dcd_xst_steps", nsteps)
         object.__setattr__(self, "namd_console_blkavg_e_and_p_steps", nsteps)
+        object.__setattr__(self,"namd_minimize_steps",
+            int(int(self.namd_run_steps) * int(self.namd_minimize_mult_scalar))
+        )
+
     
      # ---- tolerances (with defaults) ----
     allowable_error_fraction_vdw_plus_elec: float = Field(5e-3, ge=0)

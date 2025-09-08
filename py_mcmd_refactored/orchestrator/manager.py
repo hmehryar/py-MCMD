@@ -1,12 +1,16 @@
 # orchestrator/manager.py
 import os
 import logging
+from datetime import datetime
+from pathlib import Path
+
 from config.models import SimulationConfig
 # you’ll wire in your engines once they exist:
 # from engines.namd_engine import NAMDEngine
 # from engines.gomc_engine import GOMCEngine
 from engines.base import Engine
 from engines.gomc_engine import GomcEngine
+from engines.namd_engine import NamdEngine
 class SimulationOrchestrator:
     # def __init__(self, cfg: SimulationConfig):
     #     self.cfg = cfg
@@ -21,7 +25,7 @@ class SimulationOrchestrator:
         self.cfg = cfg
         self.dry_run = dry_run
 
-        self.namd = Engine(cfg, "NAMD")
+        self.namd = NamdEngine(cfg, "NAMD")
         self.gomc = GomcEngine(cfg, "GOMC")
 
         self.total_cycles = int(getattr(cfg, "total_cycles_namd_gomc_sims", 0))
@@ -34,11 +38,55 @@ class SimulationOrchestrator:
 
         # NEW: ensure run directories exist (and warn if stale)
         self._prepare_run_dirs()
+        self._setup_run_logging()     # NEW: file logging with header
+        self._emit_start_header()     # NEW: writes start time + binaries
 
         self.logger.info(
             "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s",
             self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run
         )
+    def _setup_run_logging(self) -> None:
+        """Create a per-run log file and attach a FileHandler to root logger."""
+        log_dir = Path(self.cfg.log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # mirror legacy file naming pattern with start cycle
+        log_path = log_dir / f"NAMD_GOMC_started_at_cycle_No_{self.start_cycle}.log"
+
+        # Avoid duplicate handlers if tests instantiate multiple orchestrators, singleton pattern for root logger
+        root = logging.getLogger()
+        already = any(isinstance(h, logging.FileHandler) and getattr(h, "_py_mcmd_tag", "") == str(log_path)
+                      for h in root.handlers)
+        if not already:
+            fh = logging.FileHandler(log_path, mode="w")
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(logging.Formatter("%(message)s"))
+            # mark so we don’t re-add
+            fh._py_mcmd_tag = str(log_path)
+            root.addHandler(fh)
+
+        self._log_path = log_path
+
+    def _emit_start_header(self) -> None:
+        start_time = datetime.today()
+        msg = (
+            "\n*************************************************\n"
+            f"date and time (start) = {start_time}\n"
+            "\n*************************************************\n"
+        )
+        self.logger.info(msg)
+        # Binary locations (take from engines)
+        self.logger.info(
+            "\n*************************************************\n"
+            f"namd_bin_file = {self.namd.exec_path}\n"
+            "\n*************************************************\n"
+        )
+        self.logger.info(
+            "\n*************************************************\n"
+            f"gomc_bin_file = {self.gomc.exec_path}\n"
+            "\n*************************************************\n"
+        )
+
     def _prepare_run_dirs(self) -> None:
         """Create NAMD/GOMC root folders; warn if they already exist (stale run risk)."""
         namd_root = self.cfg.path_namd_runs
