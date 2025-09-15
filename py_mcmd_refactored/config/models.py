@@ -62,6 +62,9 @@ class SimulationConfig(BaseModel):
 
     namd_minimize_steps: int = 0
 
+    # derived (used by orchestrator/engines)
+    effective_no_core_box_1: int = 0
+    total_no_cores: int = 0
 
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
@@ -234,7 +237,18 @@ class SimulationConfig(BaseModel):
             int(int(self.namd_run_steps) * int(self.namd_minimize_mult_scalar))
         )
 
-    
+        # Derive effective cores and totals (do *not* mutate the input fields)
+        if self.simulation_type == "GEMC" and (self.only_use_box_0_for_namd_for_gemc is False):
+            eff_box1 = int(self.no_core_box_1)
+            total = int(self.no_core_box_0) + eff_box1
+        else:
+            # Not GEMC, or GEMC but only using box 0 for NAMD
+            eff_box1 = 0
+            total = int(self.no_core_box_0)
+
+        object.__setattr__(self, "effective_no_core_box_1", eff_box1)
+        object.__setattr__(self, "total_no_cores", total)
+        
      # ---- tolerances (with defaults) ----
     allowable_error_fraction_vdw_plus_elec: float = Field(5e-3, ge=0)
     allowable_error_fraction_potential: float = Field(5e-3, ge=0)

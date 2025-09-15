@@ -45,6 +45,48 @@ class SimulationOrchestrator:
             "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s",
             self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run
         )
+        self._emit_core_allocation_header()   # NEW: log core allocations & warnings
+    def _emit_core_allocation_header(self) -> None:
+        st = self.cfg.simulation_type
+        only_box0 = self.cfg.only_use_box_0_for_namd_for_gemc
+        nc0 = self.cfg.no_core_box_0
+        nc1 = self.cfg.no_core_box_1
+        eff_nc1 = self.cfg.effective_no_core_box_1
+        total = self.cfg.total_no_cores
+
+        if st == "GEMC" and not only_box0:
+            if nc1 == 0:
+                msg = (
+                    "*************************************************\n"
+                    f"no_core_box_0 = {nc0}\n"
+                    "WARNING: the number of CPU cores listed for box 1 is zero (0), and should be an "
+                    "integer > 0, or the NAMD simulation for box 1 will not run.\n"
+                    f"no_core_box_1 = {nc1}\n"
+                    "*************************************************"
+                )
+                self.logger.warning(msg)
+            else:
+                msg = (
+                    "*************************************************\n"
+                    f"no_core_box_0 = {nc0}\n"
+                    f"no_core_box_1 = {nc1}\n"
+                    "*************************************************"
+                )
+                self.logger.info(msg)
+        else:
+            # Not using box 1 (either not GEMC, or GEMC w/ only box 0)
+            if nc1 != 0:
+                msg = (
+                    "*************************************************\n"
+                    f"no_core_box_0 = {nc0}\n"
+                    "WARNING: the number of CPU cores listed for box 1 are not being used.\n"
+                    f"no_core_box_1 = {nc1}\n"
+                    "*************************************************"
+                )
+                self.logger.warning(msg)
+
+        self.logger.info(f"[Core Allocation] effective_no_core_box_1={eff_nc1}, total_no_cores={total}")
+
     def _setup_run_logging(self) -> None:
         """Create a per-run log file and attach a FileHandler to root logger."""
         log_dir = Path(self.cfg.log_dir)

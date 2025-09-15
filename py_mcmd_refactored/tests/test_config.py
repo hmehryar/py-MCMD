@@ -237,3 +237,20 @@ def test_log_dir_default(tmp_path, monkeypatch):
     cfg.log_dir = str(tmp_path / "logs_test")
     orch = SimulationOrchestrator(cfg, dry_run=True)
     assert (tmp_path / "logs_test" / f"NAMD_GOMC_started_at_cycle_No_{cfg.starting_at_cycle_namd_gomc_sims}.log").exists()
+
+def test_core_derivation_gemc_both_boxes():
+    cfg = make_cfg(simulation_type="GEMC", only_use_box_0_for_namd_for_gemc=False,
+                   no_core_box_0=4, no_core_box_1=2)
+    assert cfg.effective_no_core_box_1 == 2
+    assert cfg.total_no_cores == 6
+
+def test_core_derivation_gemc_only_box0():
+    cfg = make_cfg(simulation_type="GEMC", only_use_box_0_for_namd_for_gemc=True,
+                   no_core_box_0=4, no_core_box_1=2)
+    assert cfg.effective_no_core_box_1 == 0
+    assert cfg.total_no_cores == 4
+
+def test_core_derivation_non_gemc_ignores_box1():
+    cfg = make_cfg(simulation_type="NPT", no_core_box_0=8, no_core_box_1=4)
+    assert cfg.effective_no_core_box_1 == 0
+    assert cfg.total_no_cores == 8
