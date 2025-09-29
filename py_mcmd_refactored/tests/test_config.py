@@ -254,3 +254,17 @@ def test_core_derivation_non_gemc_ignores_box1():
     cfg = make_cfg(simulation_type="NPT", no_core_box_0=8, no_core_box_1=4)
     assert cfg.effective_no_core_box_1 == 0
     assert cfg.total_no_cores == 8
+
+def test_no_core_box0_must_be_int_and_nonzero():
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(no_core_box_0="4")  # not int
+    with pytest.raises((ValidationError, ValueError)):
+        make_cfg(no_core_box_0=0)    # zero not allowed
+    cfg = make_cfg(no_core_box_0=2)  # ok
+    assert cfg.no_core_box_0 == 2
+
+def test_no_core_box1_must_be_int_ge0():
+    with pytest.raises((ValidationError, TypeError)):
+        make_cfg(no_core_box_1="2")  # not int
+    cfg = make_cfg(no_core_box_1=0)  # ok
+    assert cfg.no_core_box_1 == 0

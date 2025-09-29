@@ -23,8 +23,11 @@ class SimulationConfig(BaseModel):
     gomc_use_CPU_or_GPU: Literal["CPU", "GPU"]
     simulation_type: Literal["GEMC", "GCMC", "NPT", "NVT"]
     only_use_box_0_for_namd_for_gemc: bool
-    no_core_box_0: int = Field(..., ge=0)
-    no_core_box_1: int = Field(..., ge=0)
+
+    # Core counts
+    no_core_box_0: int = Field(..., ge=1) # must be a positive integer
+    no_core_box_1: int = Field(..., ge=0) # may be zero if not used
+    
     simulation_temp_k: float = Field(..., gt=0)
     simulation_pressure_bar: Optional[float] = None
     GCMC_ChemPot_or_Fugacity:  Optional[Literal["ChemPot", "Fugacity"]] = None
@@ -65,6 +68,26 @@ class SimulationConfig(BaseModel):
     # derived (used by orchestrator/engines)
     effective_no_core_box_1: int = 0
     total_no_cores: int = 0
+
+    @field_validator("no_core_box_0", mode="before")
+    @classmethod
+    def _ensure_box0_int_and_nonzero(cls, v):
+        if not isinstance(v, int):
+            raise TypeError(
+                f"Enter no_core_box_0 as an integer; received {v!r} (type {type(v).__name__})."
+            )
+        if v == 0:
+            raise ValueError("Enter no_core_box_0 as a non-zero number (>=1).")
+        return v
+
+    @field_validator("no_core_box_1", mode="before")
+    @classmethod
+    def _ensure_box1_int(cls, v):
+        if not isinstance(v, int):
+            raise TypeError(
+                f"Enter no_core_box_1 as an integer; received {v!r} (type {type(v).__name__})."
+            )
+        return v
 
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
