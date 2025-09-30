@@ -46,6 +46,10 @@ def make_cfg(**overrides) -> SimulationConfig:
     base.update(overrides)
     return SimulationConfig(**base)
 
+def with_two_box(cfg_kwargs):
+    cfg_kwargs.setdefault("no_core_box_1", 1)
+    return cfg_kwargs
+
 def test_load_config():
     # Resolve the JSON file path *relative* to the project root
     project_root = Path(__file__).parent.parent.parent
@@ -207,8 +211,11 @@ def test_gcmc_fugacity_requires_non_negative():
                  GCMC_ChemPot_or_Fugacity_dict={"WAT": -0.1})
 
     # OK: Fugacity with non-negative values
-    cfg = make_cfg(simulation_type="GCMC", GCMC_ChemPot_or_Fugacity="Fugacity",
-                   GCMC_ChemPot_or_Fugacity_dict={"WAT": 0.0})
+    cfg = make_cfg(simulation_type="GCMC",
+                no_core_box_1=1,  # GCMC requires box1 >= 1
+                GCMC_ChemPot_or_Fugacity="Fugacity",
+                GCMC_ChemPot_or_Fugacity_dict={"WAT": 0.0})
+    
     assert cfg.GCMC_ChemPot_or_Fugacity_dict["WAT"] == 0.0
 
 def test_npt_pressure_required_and_non_negative():
@@ -223,7 +230,10 @@ def test_npt_pressure_required_and_non_negative():
 def test_non_npt_pressure_defaults_to_atmospheric():
     cfg = make_cfg(simulation_type="NVT", simulation_pressure_bar=None)
     assert cfg.simulation_pressure_bar == 1.01325
-    cfg2 = make_cfg(simulation_type="GEMC", simulation_pressure_bar=None)
+
+    cfg2 = make_cfg(simulation_type="GEMC", 
+                    no_core_box_1=1,           # GEMC requires box1 >= 1
+                    simulation_pressure_bar=None)
     assert cfg2.simulation_pressure_bar == 1.01325
 
 def test_minimize_steps_derivation():
@@ -267,4 +277,16 @@ def test_no_core_box1_must_be_int_ge0():
     with pytest.raises((ValidationError, TypeError)):
         make_cfg(no_core_box_1="2")  # not int
     cfg = make_cfg(no_core_box_1=0)  # ok
+    assert cfg.no_core_box_1 == 0
+
+@pytest.mark.parametrize("ensemble", ["GEMC", "GCMC"])
+def test_box1_required_for_two_box_ensembles(ensemble):
+    with pytest.raises((ValidationError, ValueError)):
+        make_cfg(simulation_type=ensemble, no_core_box_1=0)  # must be >=1
+    cfg = make_cfg(simulation_type=ensemble, no_core_box_1=2)
+    assert cfg.no_core_box_1 == 2
+
+@pytest.mark.parametrize("ensemble", ["NVT", "NPT"])
+def test_box1_may_be_zero_for_single_box_ensembles(ensemble):
+    cfg = make_cfg(simulation_type=ensemble, no_core_box_1=0)
     assert cfg.no_core_box_1 == 0

@@ -26,7 +26,7 @@ class SimulationConfig(BaseModel):
 
     # Core counts
     no_core_box_0: int = Field(..., ge=1) # must be a positive integer
-    no_core_box_1: int = Field(..., ge=0) # may be zero if not used
+    no_core_box_1: int = Field(..., ge=0) # can be zero unless ensemble needs box 1
     
     simulation_temp_k: float = Field(..., gt=0)
     simulation_pressure_bar: Optional[float] = None
@@ -89,6 +89,17 @@ class SimulationConfig(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def _require_box1_when_two_box_ensemble(self):
+        # For ensembles that use a second box, require non-zero cores for box 1
+        if self.simulation_type in ("GEMC", "GCMC"):
+            if self.no_core_box_1 <= 0:
+                raise ValueError(
+                    f"Enter no_core_box_1 as a non-zero number (>=1) for {self.simulation_type}; "
+                    f"received {self.no_core_box_1}."
+                )
+        return self
+    
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
         if v is None:
