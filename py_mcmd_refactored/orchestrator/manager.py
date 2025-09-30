@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from utils.path import format_cycle_id
 from config.models import SimulationConfig
 # you’ll wire in your engines once they exist:
 # from engines.namd_engine import NAMDEngine
@@ -162,6 +163,13 @@ class SimulationOrchestrator:
 
         for cycle in range(start, end):
             self.logger.debug(f"Cycle {cycle+1}/{end}")
+            cid = format_cycle_id(cycle, 8)  # or 10 if you prefer 10-digit folders
+            namd_cycle_dir = Path(self.namd_root) / f"{cid}_a"
+            gomc_cycle_dir = Path(self.gomc_root) / cid
+
+            self.logger.info(f"Preparing directories for cycle {cycle}: {cid}, {namd_cycle_dir} and {gomc_cycle_dir}")
+            namd_cycle_dir.mkdir(parents=True, exist_ok=True)
+            gomc_cycle_dir.mkdir(parents=True, exist_ok=True)
             # --- NAMDEngine step ---
             # self.namd.prepare(cycle)
             # self.namd.run_cycle(cycle)

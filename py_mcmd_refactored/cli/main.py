@@ -111,7 +111,7 @@ def main():
     sim = SimulationOrchestrator(cfg)
     logging.info("Configuration loaded and orchestrator constructed successfully.")
 
-    # sim.run()  # or sim.execute_cycles()
+    sim.run()  # or sim.execute_cycles()
 
 if __name__ == "__main__":
     main()
