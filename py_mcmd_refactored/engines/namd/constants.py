@@ -1,4 +1,5 @@
-DEFAULT_NAMD_E_TITLES = [
+# Keep an immutable canonical tuple, and (optionally) a list view if callers expect a list.
+DEFAULT_NAMD_E_TITLES  = [
     "ETITLE:",
     "TS",
     "BOND",
@@ -21,3 +22,4 @@ DEFAULT_NAMD_E_TITLES = [
     "PRESSAVG",
     "GPRESSAVG",
 ]
+DEFAULT_NAMD_E_TITLES_LIST = list(DEFAULT_NAMD_E_TITLES)

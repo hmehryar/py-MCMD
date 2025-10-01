@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 from engines.base import Engine as BaseEngine
-
+from engines.namd.constants import DEFAULT_NAMD_E_TITLES_LIST
 logger = logging.getLogger(__name__)
 class NamdEngine(BaseEngine):
     def __init__(self, cfg, engine_type="NAMD", dry_run: bool = False):
