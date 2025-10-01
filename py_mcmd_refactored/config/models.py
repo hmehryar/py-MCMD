@@ -13,13 +13,18 @@ class SimulationConfig(BaseModel):
     Enforces type checks, ranges, and cross-field constraints.
     """
     total_cycles_namd_gomc_sims: int = Field(
-        ..., alias="total_cycles_namd_gomc_sims", ge=0,
-        description="Total number of coupled cycles (>=0)"
+        ..., alias="total_cycles_namd_gomc_sims", ge=1,
+        description="Total number of coupled cycles (>=1)"
     )
     starting_at_cycle_namd_gomc_sims: int = Field(
         ..., ge=0,
         description="Starting cycle index (>=0)"
     )
+
+    # Derived values
+    total_sims_namd_gomc: int = 0
+    starting_sims_namd_gomc: int = 0
+
     gomc_use_CPU_or_GPU: Literal["CPU", "GPU"]
     simulation_type: Literal["GEMC", "GCMC", "NPT", "NVT"]
     only_use_box_0_for_namd_for_gemc: bool
@@ -282,6 +287,10 @@ class SimulationConfig(BaseModel):
 
         object.__setattr__(self, "effective_no_core_box_1", eff_box1)
         object.__setattr__(self, "total_no_cores", total)
+
+        spc = 2  # segments per cycle: NAMD + GOMC
+        object.__setattr__(self, "total_sims_namd_gomc", spc * int(self.total_cycles_namd_gomc_sims))
+        object.__setattr__(self, "starting_sims_namd_gomc", spc * int(self.starting_at_cycle_namd_gomc_sims))
         
      # ---- tolerances (with defaults) ----
     allowable_error_fraction_vdw_plus_elec: float = Field(5e-3, ge=0)

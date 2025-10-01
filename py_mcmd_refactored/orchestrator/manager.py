@@ -24,15 +24,20 @@ class SimulationOrchestrator:
 
     def __init__(self, cfg: SimulationConfig, dry_run: bool = False):
         self.cfg = cfg
+
         self.dry_run = dry_run
 
-        self.namd = NamdEngine(cfg, "NAMD")
-        self.gomc = GomcEngine(cfg, "GOMC")
+        self.namd = NamdEngine(cfg, "NAMD", dry_run=dry_run)
+        self.gomc = GomcEngine(cfg, "GOMC", dry_run=dry_run)
 
         self.total_cycles = int(getattr(cfg, "total_cycles_namd_gomc_sims", 0))
         self.start_cycle = int(getattr(cfg, "starting_at_cycle_namd_gomc_sims", 0))
         self.namd_steps  = int(getattr(cfg, "namd_run_steps", 0))
         self.gomc_steps  = int(getattr(cfg, "gomc_run_steps", 0))
+
+        # Derived (legacy names)
+        self.total_sims_namd_gomc = int(cfg.total_sims_namd_gomc)          # 2 * total_cycles
+        self.starting_sims_namd_gomc = int(cfg.starting_sims_namd_gomc)    # 2 * start_cycle
 
         if self.total_cycles <= 0:
             raise ValueError("total_cycles_namd_gomc_sims must be > 0")
@@ -43,8 +48,8 @@ class SimulationOrchestrator:
         self._emit_start_header()     # NEW: writes start time + binaries
 
         self.logger.info(
-            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s",
-            self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run
+            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s, total_sims=%, start_sims=%s",
+            self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run, self.total_sims_namd_gomc, self.starting_sims_namd_gomc
         )
         self._emit_core_allocation_header()   # NEW: log core allocations & warnings
     def _emit_core_allocation_header(self) -> None:
@@ -184,3 +189,13 @@ class SimulationOrchestrator:
             # self.logger.info(f"Cycle {cycle} complete")
 
         self.logger.info("All cycles completed.")
+        summary = {
+            "total_cycles": self.total_cycles,
+            "start_cycle": self.start_cycle,
+            "namd_steps": self.namd_steps,
+            "gomc_steps": self.gomc_steps,
+            "cycles_completed": 0,
+            "total_sims_namd_gomc": self.total_sims_namd_gomc,
+            "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
+        }
+        return summary

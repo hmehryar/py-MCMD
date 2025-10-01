@@ -290,3 +290,22 @@ def test_box1_required_for_two_box_ensembles(ensemble):
 def test_box1_may_be_zero_for_single_box_ensembles(ensemble):
     cfg = make_cfg(simulation_type=ensemble, no_core_box_1=0)
     assert cfg.no_core_box_1 == 0
+
+def test_total_and_starting_sims_are_derived():
+    # 2 segments per cycle (NAMD+GOMC) → 5 cycles -> 10 sims, start at 2 -> 4
+    cfg = make_cfg(
+        total_cycles_namd_gomc_sims=5,
+        starting_at_cycle_namd_gomc_sims=2,
+    )
+    assert cfg.total_sims_namd_gomc == 10
+    assert cfg.starting_sims_namd_gomc == 4
+
+
+def test_total_and_starting_sims_dump():
+    cfg = make_cfg(
+        total_cycles_namd_gomc_sims=3,
+        starting_at_cycle_namd_gomc_sims=1,
+    )
+    dumped = cfg.model_dump()
+    assert dumped["total_sims_namd_gomc"] == 6
+    assert dumped["starting_sims_namd_gomc"] == 2
