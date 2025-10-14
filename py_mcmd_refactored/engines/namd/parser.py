@@ -25,3 +25,21 @@ def extract_pme_grid_from_out(out_path: Path) -> Tuple[Optional[int], Optional[i
         # Be conservative: if the file is present but unparsable, return Nones
         return None, None, None
     return namd_x_pme_grid_dim, namd_y_pme_grid_dim, namd_z_pme_grid_dim
+
+from pathlib import Path
+from typing import Optional
+
+def find_run0_fft_filename(run0_dir: Path) -> Optional[str]:
+    """
+    Return the first filename in run0_dir that starts with 'FFTW_NAMD',
+    or None if not found or directory missing.
+    """
+    try:
+        for name in sorted(run0_dir.iterdir()):
+            if name.is_file() and name.name.startswith("FFTW_NAMD"):
+                return name.name
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+    return None

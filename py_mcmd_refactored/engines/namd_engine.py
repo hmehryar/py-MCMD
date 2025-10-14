@@ -1,10 +1,13 @@
 import os
 import logging
 from pathlib import Path
+from typing import Optional
 from engines.base import Engine as BaseEngine
 from engines.namd.constants import DEFAULT_NAMD_E_TITLES_LIST
 from utils.path import format_cycle_id
 from engines.namd.parser import extract_pme_grid_from_out
+from engines.namd.parser import find_run0_fft_filename
+
 
 logger = logging.getLogger(__name__)
 class NamdEngine(BaseEngine):
@@ -57,3 +60,21 @@ class NamdEngine(BaseEngine):
             logger.warning("[NAMD] PME grid not found in %s (box=%s)", out_path, box_number)
 
         return nx, ny, nz, str(run0_dir)
+    
+    def get_run0_fft_filename(self, box_number: int) -> tuple[Optional[str], str]:
+        """
+        Returns (fft_filename or None, run0_dir_path_str) for box_number ∈ {0, 1}.
+        Never raises for missing dir/file; logs a warning and returns (None, dir).
+        """
+        if not isinstance(box_number, int) or box_number not in (0, 1):
+            raise ValueError("box_number must be integer 0 or 1")
+
+        run0_id = format_cycle_id(0, 8)  # or 10, depending on your project-wide choice
+        suffix = "a" if box_number == 0 else "b"
+        run0_dir = Path(self.cfg.path_namd_runs) / f"{run0_id}_{suffix}"
+
+        fft_name = find_run0_fft_filename(run0_dir)
+        if fft_name is None:
+            logger.warning("[NAMD] FFTW plan file not detected in run0 dir %s (box=%s)", run0_dir, box_number)
+
+        return fft_name, str(run0_dir)
