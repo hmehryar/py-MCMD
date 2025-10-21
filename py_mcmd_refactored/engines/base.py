@@ -19,9 +19,9 @@ class Engine:
         """
         self.cfg = cfg
         self.engine_type = engine_type.upper()
-        self.dry_run = dry_run
+        self.dry_run: bool = dry_run
         # Paths for this engine’s runs
-        self.run_dir = Path(self.engine_type)
+        self.run_dir: Path = Path(self.engine_type)
         os.makedirs(self.run_dir, exist_ok=True)
 
         # Emit warnings if folders already exist
@@ -31,9 +31,9 @@ class Engine:
                 "If startup/restart fails, try deleting it or its last subfolders."
             )
 
-        self.bin_dir = None
-        self.exec_path = None
-        self.path_template = None
+        self.bin_dir: Path | None = None
+        self.exec_path: Path | None = None
+        self.path_template: Path | None = None
         # Binary path
         # if self.engine_type == "NAMD":
         #     self.bin_dir = Path(cfg.namd2_bin_directory)
