@@ -3,21 +3,31 @@ channels:
   - conda-forge
 dependencies:
   - python=3.9
-  - sphinx
-  - ele
-  - nbsphinx
-  - lark-parser
-  - requests
-  - mock
-  - argparse
+  - pip
+  - numpy
   - pandas
   - scipy
-  - bumpy
-  - subprocess32
-  - json-c
-  - glob2
+  - matplotlib-base
+  - requests
+  - sphinx
+  - nbsphinx
+  - lark-parser
+  - mock
+  - ele
+  - mosdef-gomc
+  - mbuild
+  - foyer
+  - openmm
+  - netcdf4
+  - parmed
+  - mdtraj
+  - signac
+  - signac-flow
+  - rdkit
+  - pytest
+  - pytest-cov
+  - ipython
+  - jupyter_client
   - pip:
     - sphinx_rtd_theme
     - sphinxcontrib-svg2pdfconverter
-sphinx:
-  fail_on_warning: true
