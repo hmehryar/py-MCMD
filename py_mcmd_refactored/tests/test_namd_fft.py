@@ -4,6 +4,7 @@ sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 from pathlib import Path
 from config.models import SimulationConfig
 from engines.namd_engine import NamdEngine
+import pytest
 
 def make_cfg(tmp: Path, **kw):
     base = dict(
@@ -29,6 +30,7 @@ def make_cfg(tmp: Path, **kw):
     base.update(kw)
     return SimulationConfig(**base)
 
+# from engines.namd.parser import get_run0_fft_filename
 def test_get_run0_fft_filename_found(tmp_path: Path):
     cfg = make_cfg(tmp_path)
     run0 = tmp_path / "NAMD" / "00000000_a"
@@ -42,6 +44,34 @@ def test_get_run0_fft_filename_found(tmp_path: Path):
 def test_get_run0_fft_filename_missing(tmp_path: Path):
     cfg = make_cfg(tmp_path)
     eng = NamdEngine(cfg, dry_run=True)
-    name, dir_str = eng.get_run0_fft_filename(1)
+    # name, dir_str = eng.get_run0_fft_filename(1)
+    # assert name is None
+    # assert dir_str.endswith("NAMD/00000000_b")
+    with pytest.raises(FileNotFoundError):
+        eng.get_run0_fft_filename(1)
+
+# Target functions
+from engines.namd.parser import get_run0_dir 
+def test_get_run0_dir_builds_expected_path(tmp_path):
+    base = tmp_path / "namd_runs"
+    base.mkdir()
+    # run id 0 with id_width=8 → "00000000"; box 0 → suffix 'a'
+    p0 = get_run0_dir(base, box_number=0, id_width=8)
+    p1 = get_run0_dir(base, box_number=1, id_width=8)
+    assert p0.name.endswith("_a")
+    assert p1.name.endswith("_b")
+    assert p0.parent == base
+    assert p1.parent == base
+
+def test_get_run0_fft_filename_passthrough_when_not_found(tmp_path, monkeypatch):
+    # Force the finder to return None regardless of files
+    monkeypatch.setattr("engines.namd.parser.find_run0_fft_filename", lambda _p: None)
+    cfg = make_cfg(tmp_path)
+    base = tmp_path / "namd_runs"
+    (base / "00000000_a").mkdir(parents=True)
+    cfg.path_namd_runs=str(base)
+    engine = NamdEngine(cfg, dry_run=True)
+    name, run0_dir = engine.get_run0_fft_filename(0)
     assert name is None
-    assert dir_str.endswith("NAMD/00000000_b")
+    assert Path(run0_dir).name == "00000000_a"
+

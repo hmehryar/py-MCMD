@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Optional, Tuple
-
+from utils.path import format_cycle_id
+import logging
+logger = logging.getLogger(__name__)
 def extract_pme_grid_from_out(out_path: Path) -> Tuple[Optional[int], Optional[int], Optional[int]]:
     """
     Parse NAMD out.dat to find the line starting with:
@@ -39,7 +41,22 @@ def find_run0_fft_filename(run0_dir: Path) -> Optional[str]:
             if name.is_file() and name.name.startswith("FFTW_NAMD"):
                 return name.name
     except FileNotFoundError:
-        return None
+        raise FileNotFoundError(f"Directory {run0_dir} does not exist.")
+        # return None
     except Exception:
-        return None
+        raise
+        # return None
     return None
+
+def get_run0_dir(path_namd_runs: Path | str, box_number: int, id_width: int = 8) -> Path:
+    """
+    Return the run0 directory (Path) for a given box (0→'a', 1→'b').
+    """
+    if not isinstance(box_number, int) or box_number not in (0, 1):
+        raise ValueError("box_number must be integer 0 or 1")
+    base = Path(path_namd_runs)
+    run0_id = format_cycle_id(0, id_width)
+    suffix = "a" if box_number == 0 else "b"
+    return base / f"{run0_id}_{suffix}"
+
+
