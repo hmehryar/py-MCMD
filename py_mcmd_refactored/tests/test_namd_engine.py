@@ -41,3 +41,4 @@ def test_get_run0_pme_dims(tmp_path: Path):
     nx, ny, nz, run0_dir = eng.get_run0_pme_dims(0)
     assert (nx, ny, nz) == (48, 50, 52)
     assert run0_dir.endswith("NAMD/0000000000_a")
+

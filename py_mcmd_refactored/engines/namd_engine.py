@@ -80,4 +80,52 @@ class NamdEngine(BaseEngine):
 
         return fft_name, str(run0_dir)
 
-    
+    def delete_namd_run_0_fft_file(self, box_number: int) -> None:
+        """
+        Deletes the run 0 (1st NAMD simulation) FFT filename.
+
+        Parameters
+        ----------
+        box_number : int
+            The simulation box number, which can only be 0 or 1
+        """
+        # Preserve legacy error message text, but modernize validation
+        if not isinstance(box_number, int) or box_number not in (0, 1):
+            raise ValueError(
+                "ERROR Enter an interger of 0 or 1  for box_number in "
+                "the get_namd_run_0_pme_dim function. \n"
+            )
+
+        write_log_data = (
+            "*************************************************\n"
+            "The NAMD FFT file was deleted from Run 0 in Box {} \n"
+            "************************************************* \n".format(str(box_number))
+        )
+
+        try:
+            # Use the parser to locate the FFT file and directory
+            fft_filename, run0_dir = self.get_run0_fft_filename(
+                box_number=box_number
+            )
+
+            # If we found a filename, delete it. Mirror legacy: swallow errors.
+            if fft_filename:
+                fft_path = Path(run0_dir) / fft_filename
+                try:
+                    # Python 3.8+: missing_ok available
+                    fft_path.unlink(missing_ok=True)  # type: ignore[arg-type]
+                except TypeError:
+                    # Fallback for Python < 3.8
+                    try:
+                        fft_path.unlink()
+                    except FileNotFoundError:
+                        pass
+
+            # Log/print banner regardless of outcome (legacy parity)
+            logger.info(write_log_data.strip("\n"))
+            print(write_log_data)
+
+        except Exception:
+            # Legacy behavior: still emit the banner even if something goes wrong
+            logger.info(write_log_data.strip("\n"))
+            print(write_log_data)
