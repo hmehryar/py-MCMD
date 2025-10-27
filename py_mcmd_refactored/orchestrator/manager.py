@@ -48,7 +48,7 @@ class SimulationOrchestrator:
         self._emit_start_header()     # NEW: writes start time + binaries
 
         self.logger.info(
-            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s, total_sims=%, start_sims=%s",
+            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s, total_sims=%s, start_sims=%s",
             self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run, self.total_sims_namd_gomc, self.starting_sims_namd_gomc
         )
         self._emit_core_allocation_header()   # NEW: log core allocations & warnings
