@@ -10,7 +10,8 @@ class GomcEngine(BaseEngine):
 
         self.dry_run = dry_run
         # gomc_bin_directory is optional during tests / dry-run
-        self.bin_dir = Path(cfg.gomc_bin_directory)
+        self.bin_dir = self._resolve_gomc_bin_dir(cfg)
+        # self.bin_dir = Path(cfg.gomc_bin_directory)
         self.path_template = Path(cfg.path_gomc_template) if getattr(cfg, "path_gomc_template", None) else None
 
         # self.path_template: Path = Path(cfg.path_gomc_template) if cfg.path_gomc_template else None
@@ -18,6 +19,7 @@ class GomcEngine(BaseEngine):
         self.ensemble: str = str(cfg.simulation_type).upper()
         self.exec_name: str = f"GOMC_{'GPU' if self.use_gpu else 'CPU'}_{self.ensemble}"
 
+        self.exec_path = (self.bin_dir / self.exec_name).resolve()
 
         # In dry-run, don't touch the filesystem; tests may not provide real binaries.
         if not self.dry_run:
@@ -30,11 +32,11 @@ class GomcEngine(BaseEngine):
                     f"[GOMC] Executable not found: {self.exec_name} under {self.bin_dir}"
                 )
             # self.exec_path = self.bin_dir / exe
-            self.exec_path = "{}/{}/GOMC_{}_{}".format(
-                str(os.getcwd()),
-                self.bin_dir,
-                self.exec_name
-            )
+            # self.exec_path = "{}/{}/GOMC_{}_{}".format(
+            #     str(os.getcwd()),
+            #     self.bin_dir,
+            #     self.exec_name
+            # )
         else:
              logger.warning("GOMC binary dir %s not found; continuing in dry_run.", self.bin_dir)
         self.run_steps = int(getattr(cfg, "gomc_run_steps", 0))    
@@ -42,3 +44,17 @@ class GomcEngine(BaseEngine):
     def run(self):
         # Implement the logic to run GOMC simulation using the template
         pass
+
+    from shutil import which
+
+    def _resolve_gomc_bin_dir(self, cfg) -> Path:
+        # 1) explicit config wins
+        user_dir = getattr(cfg, "gomc_bin_directory", None)
+        if user_dir:
+            return Path(user_dir).expanduser().resolve()
+
+        # 2) fallback: sibling GOMC/bin relative to this file, not CWD
+        # this file: .../py_mcmd_refactored/engines/gomc_engine.py
+        py_root = Path(__file__).resolve().parents[1]     # py_mcmd_refactored/
+        repo_root = py_root.parent                        # repo root containing py_mcmd_refactored/
+        return (repo_root / "GOMC" / "bin").resolve()
