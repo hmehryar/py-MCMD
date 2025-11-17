@@ -1,4 +1,7 @@
+
 # py_mcmd_refactored/tests/test_namd_energy.py
+import sys
+sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 from engines.namd.energy import NamdEnergyData
 
 def test_dataclass_instantiation_and_fields():
@@ -19,7 +22,7 @@ def test_dataclass_instantiation_and_fields():
     assert d.elect_last == 20.0
     assert d.vdw_plus_elec_first == d.vdw[0] + d.elect[0]
 
-# py_mcmd_refactored/tests/test_namd_energy.py  (append)
+
 import math
 from engines.namd.energy import _extract_titles_and_rows
 

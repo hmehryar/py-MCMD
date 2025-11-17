@@ -129,3 +129,14 @@ class NamdEngine(BaseEngine):
             # Legacy behavior: still emit the banner even if something goes wrong
             logger.info(write_log_data.strip("\n"))
             print(write_log_data)
+
+    
+    # from engines.namd.energy_compare import compare_namd_gomc_energies
+
+    # # inside your engine method:
+    # compare_namd_gomc_energies(
+    #     self.cfg,  # SimulationConfig
+    #     pot_final, pot_initial,
+    #     vpe_final, vpe_initial,
+    #     run_no, box_number,
+    # )

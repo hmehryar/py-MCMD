@@ -103,6 +103,14 @@ class SimulationOrchestrator:
 
         # Avoid duplicate handlers if tests instantiate multiple orchestrators, singleton pattern for root logger
         root = logging.getLogger()
+
+        # Ensure root captures INFO from all modules
+        if root.level > logging.INFO:
+            root.setLevel(logging.INFO)                      
+        
+        # (Optional) route `warnings.warn()` into logging
+        
+        logging.captureWarnings(True)
         already = any(isinstance(h, logging.FileHandler) and getattr(h, "_py_mcmd_tag", "") == str(log_path)
                       for h in root.handlers)
         if not already:
