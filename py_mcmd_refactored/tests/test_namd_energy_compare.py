@@ -1,4 +1,8 @@
 # py_mcmd_refactored/tests/test_energy_compare.py
+# py-MCMD
+# Author: Haydar Mehryar 
+# Copyright (c) 2025
+# SPDX-License-Identifier: MIT
 
 import sys
 sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
@@ -105,3 +109,5 @@ def test_both_checks_emit_two_messages(caplog):
     # One potential line and one vdw+elec line
     assert any("Potential energies error fraction" in m for m in msgs)
     assert any("VDW + electrostatic" in m for m in msgs)
+
+

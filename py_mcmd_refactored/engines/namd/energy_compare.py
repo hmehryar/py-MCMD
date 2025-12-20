@@ -108,3 +108,6 @@ def compare_namd_gomc_energies(  # config-aware entrypoint
     return None
 
 
+
+
+
