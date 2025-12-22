@@ -107,3 +107,16 @@ def test_orchestrator_defaults_namd_simulation_order_to_series(tmp_path: Path):
     cfg = make_cfg_for_orch(tmp_path)
     orch = SimulationOrchestrator(cfg, dry_run=True)
     assert orch.namd_simulation_order == "series"
+
+
+def test_orchestrator_initializes_run_state(tmp_path: Path):
+    cfg = make_cfg_for_orch(tmp_path)
+    orch = SimulationOrchestrator(cfg, dry_run=True)
+
+    assert hasattr(orch, "state")
+    assert orch.state.current_step == 0
+
+    summary = orch.run()
+    assert "state" in summary
+    assert summary["state"]["current_step"] == 0
+

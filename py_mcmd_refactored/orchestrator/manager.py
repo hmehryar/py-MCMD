@@ -6,6 +6,8 @@ from pathlib import Path
 
 from utils.path import format_cycle_id
 from config.models import SimulationConfig
+from .state import RunState
+
 # you’ll wire in your engines once they exist:
 # from engines.namd_engine import NAMDEngine
 # from engines.gomc_engine import GOMCEngine
@@ -24,6 +26,8 @@ class SimulationOrchestrator:
 
     def __init__(self, cfg: SimulationConfig, dry_run: bool = False):
         self.cfg = cfg
+        # Central mutable state for the legacy run_no loop
+        self.state = RunState.from_config(cfg)
 
         # Propagated execution strategy for NAMD (used later when planning two-box GEMC runs)
         self.namd_simulation_order = getattr(cfg, "namd_simulation_order", "series")
@@ -209,5 +213,6 @@ class SimulationOrchestrator:
             "cycles_completed": 0,
             "total_sims_namd_gomc": self.total_sims_namd_gomc,
             "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
+            "state": self.state.snapshot(),
         }
         return summary
