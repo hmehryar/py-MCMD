@@ -124,3 +124,21 @@ def test_gcmc_negative_fugacity_value():
     data['GCMC_ChemPot_or_Fugacity_dict'] = {'x': -1.0}
     with pytest.raises(ValueError):
         SimulationConfig(**data)
+
+def test_namd_simulation_order_default_is_series():
+    cfg = SimulationConfig(**minimal_config())
+    assert cfg.namd_simulation_order == "series"
+
+
+def test_namd_simulation_order_accepts_parallel():
+    data = minimal_config()
+    data["namd_simulation_order"] = "parallel"
+    cfg = SimulationConfig(**data)
+    assert cfg.namd_simulation_order == "parallel"
+
+
+def test_namd_simulation_order_rejects_invalid_value():
+    data = minimal_config()
+    data["namd_simulation_order"] = "not-a-real-mode"
+    with pytest.raises(ValidationError):
+        SimulationConfig(**data)

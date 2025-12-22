@@ -96,3 +96,14 @@ def test_orchestrator_consumes_config_derived_sims(tmp_path: Path, monkeypatch):
     assert (tmp_path / "logs").exists()
     assert (tmp_path / "NAMD").exists()
     assert (tmp_path / "GOMC").exists()
+
+def test_orchestrator_propagates_namd_simulation_order(tmp_path: Path):
+    cfg = make_cfg_for_orch(tmp_path, namd_simulation_order="parallel")
+    orch = SimulationOrchestrator(cfg, dry_run=True)
+    assert orch.namd_simulation_order == "parallel"
+
+
+def test_orchestrator_defaults_namd_simulation_order_to_series(tmp_path: Path):
+    cfg = make_cfg_for_orch(tmp_path)
+    orch = SimulationOrchestrator(cfg, dry_run=True)
+    assert orch.namd_simulation_order == "series"

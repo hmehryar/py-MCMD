@@ -25,6 +25,9 @@ class SimulationOrchestrator:
     def __init__(self, cfg: SimulationConfig, dry_run: bool = False):
         self.cfg = cfg
 
+        # Propagated execution strategy for NAMD (used later when planning two-box GEMC runs)
+        self.namd_simulation_order = getattr(cfg, "namd_simulation_order", "series")
+
         self.dry_run = dry_run
 
         self.namd = NamdEngine(cfg, "NAMD", dry_run=dry_run)
@@ -47,9 +50,10 @@ class SimulationOrchestrator:
         self._setup_run_logging()     # NEW: file logging with header
         self._emit_start_header()     # NEW: writes start time + binaries
 
+
         self.logger.info(
-            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s, total_sims=%s, start_sims=%s",
-            self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run, self.total_sims_namd_gomc, self.starting_sims_namd_gomc
+            "Initialized orchestrator: total_cycles=%s, start_cycle=%s, namd_steps=%s, gomc_steps=%s, dry_run=%s, total_sims=%s, start_sims=%s, namd_simulation_order=%s",
+            self.total_cycles, self.start_cycle, self.namd_steps, self.gomc_steps, self.dry_run, self.total_sims_namd_gomc, self.starting_sims_namd_gomc, self.namd_simulation_order
         )
         self._emit_core_allocation_header()   # NEW: log core allocations & warnings
     def _emit_core_allocation_header(self) -> None:

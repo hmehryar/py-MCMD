@@ -107,6 +107,10 @@ def main():
         logging.error("Failed to load config: %s", e)
         sys.exit(1)
 
+    # CLI overrides (do not require JSON config changes)
+    # NOTE: parse_args() normalizes invalid/missing values to "series".
+    cfg = cfg.model_copy(update={"namd_simulation_order": args.namd_simulation_order})
+
     # hand off to the orchestrator
     sim = SimulationOrchestrator(cfg)
     logging.info("Configuration loaded and orchestrator constructed successfully.")

@@ -29,6 +29,19 @@ class SimulationConfig(BaseModel):
     simulation_type: Literal["GEMC", "GCMC", "NPT", "NVT"]
     only_use_box_0_for_namd_for_gemc: bool
 
+
+    # Execution strategy
+    # NOTE: This is only meaningful for GEMC when running two NAMD boxes
+    # (only_use_box_0_for_namd_for_gemc=False). For other ensembles, the
+    # orchestrator/engines may effectively treat execution as series.
+    namd_simulation_order: Literal["series", "parallel"] = Field(
+        default="series",
+        description=(
+            "NAMD execution order for two-box GEMC runs: 'series' or 'parallel'. "
+            "Defaults to 'series'."
+        ),
+    )
+
     # Core counts
     no_core_box_0: int = Field(..., ge=1) # must be a positive integer
     no_core_box_1: int = Field(..., ge=0) # can be zero unless ensemble needs box 1
