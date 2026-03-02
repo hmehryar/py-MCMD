@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from pathlib import Path
+import subprocess
+
+from utils.subprocess_runner import Command, DryRunSubprocessRunner, SubprocessRunner
+
+
+def test_dry_run_creates_stdout_file(tmp_path: Path):
+    runner = DryRunSubprocessRunner()
+    cmd = Command(argv=["/bin/echo", "hello"], cwd=tmp_path, stdout_path=tmp_path / "out.dat")
+
+    handle = runner.start(cmd)
+    rc = runner.wait(handle)
+
+    assert rc == 0
+    assert (tmp_path / "out.dat").exists()
+    assert "dry_run" in (tmp_path / "out.dat").read_text()
+
+
+def test_runner_invokes_popen_with_cwd_and_redirect(monkeypatch, tmp_path: Path):
+    calls = {}
+
+    class DummyPopen:
+        def __init__(self, args, cwd=None, stdout=None, stderr=None, text=None):
+            calls["args"] = args
+            calls["cwd"] = cwd
+            calls["stdout"] = stdout
+            calls["stderr"] = stderr
+            calls["text"] = text
+            self.pid = 12345
+            self._py_mcmd_out_fh = stdout
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", DummyPopen)
+
+    runner = SubprocessRunner(dry_run=False)
+    cmd = Command(argv=["/bin/echo", "hello"], cwd=tmp_path, stdout_path=tmp_path / "out.dat")
+
+    handle = runner.start(cmd)
+    rc = runner.wait(handle)
+
+    assert rc == 0
+    assert calls["args"] == ["/bin/echo", "hello"]
+    assert calls["cwd"] == str(tmp_path)
+    assert calls["stderr"] == subprocess.STDOUT
+    assert calls["text"] is True
+    assert Path(calls["stdout"].name) == tmp_path / "out.dat"

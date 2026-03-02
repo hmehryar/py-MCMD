@@ -1,4 +1,6 @@
 import sys
+
+from py_mcmd_refactored.tests.test_namd_energy_compare import cfg
 sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 
 # tests/test_orchestrator.py
@@ -118,5 +120,9 @@ def test_orchestrator_initializes_run_state(tmp_path: Path):
 
     summary = orch.run()
     assert "state" in summary
-    assert summary["state"]["current_step"] == 0
+    # assert summary["state"]["current_step"] == 0
+    # starting_at_cycle defaults to 1 in make_cfg_for_orch:
+    # current_step = (namd_run_steps + gomc_run_steps)*start_cycle + namd_minimize_steps
+    expected = (cfg.namd_run_steps + cfg.gomc_run_steps) * cfg.starting_at_cycle_namd_gomc_sims + cfg.namd_minimize_steps
+    assert summary["state"]["current_step"] == expected
 

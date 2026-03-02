@@ -5,12 +5,15 @@ from typing import Optional
 from engines.base import Engine as BaseEngine
 from engines.namd.constants import DEFAULT_NAMD_E_TITLES_LIST
 # from run_NAMD_GOMC_refactored import get_namd_run_0_fft_filename
+from py_mcmd_refactored.tests.test_namd_energy_compare import cfg
 from utils.path import format_cycle_id
 from engines.namd.parser import extract_pme_grid_from_out
 from engines.namd.parser import find_run0_fft_filename
 from engines.namd.parser import get_run0_dir
 from pathlib import Path
 from typing import Callable, Optional, Tuple
+from utils.subprocess_runner import Command, SubprocessRunner
+from engines.namd.plan import NamdExecutionPlan, build_namd_execution_plan
 
 logger = logging.getLogger(__name__)
 class NamdEngine(BaseEngine):
@@ -38,7 +41,11 @@ class NamdEngine(BaseEngine):
             
         # ... use namd_template when generating the per-cycle NAMD input ...
         
-        self.run_steps = int(getattr(cfg, "namd_run_steps", 0))
+        # self.run_steps = int(getattr(cfg, "namd_run_steps", 0))
+        self.runner = SubprocessRunner(dry_run=self.dry_run)
+        self.steps_per_run = int(getattr(cfg, "namd_run_steps", 0))
+
+
     def run(self):
         # Implement the logic to run NAMD simulation using the template
         pass
@@ -140,3 +147,91 @@ class NamdEngine(BaseEngine):
     #     vpe_final, vpe_initial,
     #     run_no, box_number,
     # )
+
+    def run_steps(self, *, run_dir: Path, cores: int) -> int:
+        cmd = Command(
+            argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
+            cwd=Path(run_dir),
+            stdout_path=Path(run_dir) / "out.dat",
+        )
+        return self.runner.run_and_wait(cmd)
+    
+    def link_run0_fft_file_into_dir(self, box_number: int, dest_dir: Path) -> None:
+        """Link (symlink) the Run-0 FFTW plan file into a later NAMD run directory.
+
+        Legacy behavior used: `ln -sf <run0_dir>/<fft_file> <dest_dir>` which creates/overwrites
+        a symlink inside `dest_dir`.
+
+        - If the Run-0 FFT file is not found, this is a no-op (with a warning).
+        - If the destination already exists (file/symlink), it is replaced.
+        """
+        if not isinstance(box_number, int) or box_number not in (0, 1):
+            raise ValueError("box_number must be integer 0 or 1")
+
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        fft_filename, run0_dir = self.get_run0_fft_filename(box_number)
+        if not fft_filename:
+            logger.warning(
+                "[NAMD] Cannot link run0 FFT file: none detected for box=%s (run0_dir=%s)",
+                box_number,
+                run0_dir,
+            )
+            return
+
+        src = Path(run0_dir) / fft_filename
+        dst = dest_dir / fft_filename
+
+        # Mirror `ln -sf`: remove existing destination entry if present.
+        try:
+            if dst.is_symlink() or dst.is_file():
+                dst.unlink()
+        except FileNotFoundError:
+            pass
+
+        if dst.exists() and dst.is_dir():
+            raise IsADirectoryError(f"Destination path {dst} is a directory; cannot overwrite with symlink")
+
+        # If source is missing, raise unless dry_run (then create a placeholder).
+        if not src.exists():
+            if self.dry_run:
+                src.parent.mkdir(parents=True, exist_ok=True)
+                src.write_text("[dry_run] missing FFTW plan placeholder\n")
+            else:
+                raise FileNotFoundError(f"Run-0 FFT file not found: {src}")
+
+        dst.symlink_to(src)
+        logger.info("[NAMD] Linked run0 FFT file for box=%s: %s -> %s", box_number, dst, src)
+
+    def build_execution_plan(self, *, box0_dir: Path, box1_dir: Optional[Path]) -> NamdExecutionPlan:
+        exec_path = str(self.exec_path) if self.exec_path is not None else "namd2"
+        return build_namd_execution_plan(
+            self.cfg,
+            exec_path=exec_path,
+            box0_dir=Path(box0_dir),
+            box1_dir=Path(box1_dir) if box1_dir is not None else None,
+        )
+
+
+    def execute_plan(self, plan: NamdExecutionPlan) -> dict:
+        """Execute the plan with legacy wait semantics.
+
+        - series: start+wait box0, then start+wait box1
+        - parallel: start box0, start box1, then wait box0, wait box1
+        """
+        if plan.mode == "series" or plan.box1 is None:
+            h0 = self.runner.start(plan.box0)
+            rc0 = self.runner.wait(h0)
+            rc1 = None
+            if plan.box1 is not None:
+                h1 = self.runner.start(plan.box1)
+                rc1 = self.runner.wait(h1)
+            return {"rc_box0": rc0, "rc_box1": rc1, "mode": plan.mode}
+
+        # parallel
+        h0 = self.runner.start(plan.box0)
+        h1 = self.runner.start(plan.box1)
+        rc0 = self.runner.wait(h0)
+        rc1 = self.runner.wait(h1)
+        return {"rc_box0": rc0, "rc_box1": rc1, "mode": plan.mode}

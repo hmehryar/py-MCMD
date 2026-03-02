@@ -6,7 +6,7 @@ from pathlib import Path
 
 from utils.path import format_cycle_id
 from config.models import SimulationConfig
-from .state import RunState
+from .state import RunState, PmeDims
 
 # you’ll wire in your engines once they exist:
 # from engines.namd_engine import NAMDEngine
@@ -14,6 +14,8 @@ from .state import RunState
 from engines.base import Engine
 from engines.gomc_engine import GomcEngine
 from engines.namd_engine import NamdEngine
+from orchestrator.restart import compute_start_context, apply_start_context
+
 class SimulationOrchestrator:
     # def __init__(self, cfg: SimulationConfig):
     #     self.cfg = cfg
@@ -177,8 +179,15 @@ class SimulationOrchestrator:
         self.namd_root = namd_root
         self.gomc_root = gomc_root
     def run(self):
+        ctx = compute_start_context(self.cfg, id_width=8)
+        apply_start_context(self.state, ctx)
         """High-level entrypoint for running all cycles."""
         self.logger.info("Starting coupled NAMD↔GOMC simulation")
+
+        # Restart: attempt to seed PME dims from Run-0 before first NAMD config generation.
+        if int(self.cfg.starting_at_cycle_namd_gomc_sims) > 0:
+            self.refresh_pme_dims_from_run0()
+
         start = self.cfg.starting_at_cycle_namd_gomc_sims
         end   = self.cfg.total_cycles_namd_gomc_sims
 
@@ -204,6 +213,10 @@ class SimulationOrchestrator:
             # optionally combine or log the per-cycle stats
             # self.logger.info(f"Cycle {cycle} complete")
 
+            self.namd.run_steps(run_dir=namd_cycle_dir, cores=self.cfg.total_no_cores)
+            self.gomc.run_steps(run_dir=gomc_cycle_dir, cores=self.cfg.total_no_cores)
+
+
         self.logger.info("All cycles completed.")
         summary = {
             "total_cycles": self.total_cycles,
@@ -216,3 +229,24 @@ class SimulationOrchestrator:
             "state": self.state.snapshot(),
         }
         return summary
+    
+    def refresh_pme_dims_from_run0(self) -> None:
+        """Load NAMD Run-0 PME grid dims into orchestrator state.
+
+        Safe to call at any time. If Run-0 `out.dat` is missing or does not contain
+        PME grid dimensions, this leaves existing state unchanged.
+        """
+        nx0, ny0, nz0, _ = self.namd.get_run0_pme_dims(0)
+        if nx0 is not None and ny0 is not None and nz0 is not None:
+            self.state.pme_box0 = PmeDims(x=nx0, y=ny0, z=nz0)
+            self.logger.info("[PME] Loaded Run-0 PME dims for box0: %s %s %s", nx0, ny0, nz0)
+        else:
+            self.logger.info("[PME] Run-0 PME dims not available for box0")
+
+        if self.cfg.simulation_type == "GEMC" and (self.cfg.only_use_box_0_for_namd_for_gemc is False):
+            nx1, ny1, nz1, _ = self.namd.get_run0_pme_dims(1)
+            if nx1 is not None and ny1 is not None and nz1 is not None:
+                self.state.pme_box1 = PmeDims(x=nx1, y=ny1, z=nz1)
+                self.logger.info("[PME] Loaded Run-0 PME dims for box1: %s %s %s", nx1, ny1, nz1)
+            else:
+                self.logger.info("[PME] Run-0 PME dims not available for box1")

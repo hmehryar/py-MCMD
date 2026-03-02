@@ -2,6 +2,8 @@ import os
 import logging
 from pathlib import Path
 from engines.base import Engine as BaseEngine
+from py_mcmd_refactored.tests.test_namd_energy_compare import cfg
+from utils.subprocess_runner import Command, SubprocessRunner
 
 logger = logging.getLogger(__name__)
 class GomcEngine(BaseEngine):
@@ -39,7 +41,10 @@ class GomcEngine(BaseEngine):
             # )
         else:
              logger.warning("GOMC binary dir %s not found; continuing in dry_run.", self.bin_dir)
-        self.run_steps = int(getattr(cfg, "gomc_run_steps", 0))    
+        # self.run_steps = int(getattr(cfg, "gomc_run_steps", 0))   
+        self.runner = SubprocessRunner(dry_run=self.dry_run)
+        self.steps_per_run = int(getattr(cfg, "gomc_run_steps", 0)) 
+
         # ... use gomc_template when generating the per-cycle GOMC input ...
     def run(self):
         # Implement the logic to run GOMC simulation using the template
@@ -58,3 +63,11 @@ class GomcEngine(BaseEngine):
         py_root = Path(__file__).resolve().parents[1]     # py_mcmd_refactored/
         repo_root = py_root.parent                        # repo root containing py_mcmd_refactored/
         return (repo_root / "GOMC" / "bin").resolve()
+    
+    def run_steps(self, *, run_dir: Path, cores: int) -> int:
+        cmd = Command(
+            argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
+            cwd=Path(run_dir),
+            stdout_path=Path(run_dir) / "out.dat",
+        )
+        return self.runner.run_and_wait(cmd)
