@@ -13,6 +13,7 @@ from engines.namd.energy_compare import compare_namd_gomc_energies
 from utils.path import format_cycle_id
 from utils.subprocess_runner import Command, SubprocessRunner
 from orchestrator.state import RunState
+import time
 
 logger = logging.getLogger(__name__)
 # from __future__ import annotations
@@ -440,18 +441,51 @@ class NamdEngine(BaseEngine):
                 stdout_path=Path(namd_box1_dir) / "out.dat",
             )
 
+        # rc0 = rc1 = None
+        # if cmd1 is None or mode == "series":
+        #     h0 = self.runner.start(cmd0)
+        #     rc0 = self.runner.wait(h0)
+        #     if cmd1 is not None:
+        #         h1 = self.runner.start(cmd1)
+        #         rc1 = self.runner.wait(h1)
+        # else:
+        #     h0 = self.runner.start(cmd0)
+        #     h1 = self.runner.start(cmd1)
+        #     rc0 = self.runner.wait(h0)
+        #     rc1 = self.runner.wait(h1)
         rc0 = rc1 = None
+        box0_time = 0.0
+        box1_time = 0.0
+
         if cmd1 is None or mode == "series":
+            t0 = time.perf_counter()
             h0 = self.runner.start(cmd0)
             rc0 = self.runner.wait(h0)
+            box0_time = time.perf_counter() - t0
+
             if cmd1 is not None:
+                t1 = time.perf_counter()
                 h1 = self.runner.start(cmd1)
                 rc1 = self.runner.wait(h1)
+                box1_time = time.perf_counter() - t1
+
+            max_namd_cycle_time_s = box0_time + box1_time
         else:
+            t0 = time.perf_counter()
             h0 = self.runner.start(cmd0)
+            t1 = time.perf_counter()
             h1 = self.runner.start(cmd1)
+
             rc0 = self.runner.wait(h0)
+            end0 = time.perf_counter()
             rc1 = self.runner.wait(h1)
+            end1 = time.perf_counter()
+
+            box0_time = end0 - t0
+            box1_time = end1 - t1
+            max_namd_cycle_time_s = max(box0_time, box1_time)
+
+        state.timings.max_namd_cycle_time_s = round(max_namd_cycle_time_s, 6)
 
         if (rc0 not in (None, 0)) or (rc1 not in (None, 0)):
             if not self.dry_run:

@@ -15,6 +15,8 @@ from engines.base import Engine
 from engines.gomc_engine import GomcEngine
 from engines.namd_engine import NamdEngine
 
+import time
+
 
 try:
     from orchestrator.restart import compute_start_context, apply_start_context
@@ -36,6 +38,7 @@ class SimulationOrchestrator:
         self.cfg = cfg
         # Central mutable state for the legacy run_no loop
         self.state = RunState.from_config(cfg)
+        self._time_stats_lines = []
 
         # Propagated execution strategy for NAMD (used later when planning two-box GEMC runs)
         self.namd_simulation_order = getattr(cfg, "namd_simulation_order", "series")
@@ -265,6 +268,32 @@ class SimulationOrchestrator:
 
         cycles_completed = 0
 
+        # for run_no in range(starting_sims, total_sims):
+        #     self.logger.info(
+        #         "*************************************************\n"
+        #         "*************************************************\n"
+        #         "run_no = %s (START)\n"
+        #         "*************************************************",
+        #         run_no,
+        #     )
+
+        #     if run_no % 2 == 0:
+        #         # NAMD segment
+        #         self.namd.run_segment(run_no=run_no, state=self.state)
+        #     else:
+        #         # GOMC segment
+        #         self.gomc.run_segment(run_no=run_no, state=self.state)
+        #         cycles_completed += 1
+
+        #     self.logger.info(
+        #         "*************************************************\n"
+        #         "run_no = %s (End)\n"
+        #         "*************************************************",
+        #         run_no,
+        #     )
+        cycle_start_perf = None
+        self._time_stats_lines = []
+
         for run_no in range(starting_sims, total_sims):
             self.logger.info(
                 "*************************************************\n"
@@ -274,13 +303,44 @@ class SimulationOrchestrator:
                 run_no,
             )
 
+            # TIME_STATS: cycle start at even run_no
             if run_no % 2 == 0:
-                # NAMD segment
+                cycle_start_perf = time.perf_counter()
+
+            if run_no % 2 == 0:
                 self.namd.run_segment(run_no=run_no, state=self.state)
             else:
-                # GOMC segment
                 self.gomc.run_segment(run_no=run_no, state=self.state)
                 cycles_completed += 1
+
+                # TIME_STATS: cycle end at odd run_no
+                cycle_end_perf = time.perf_counter()
+                if cycle_start_perf is None:
+                    cycle_start_perf = cycle_end_perf
+
+                cycle_run_time_s = round(cycle_end_perf - cycle_start_perf, 6)
+
+                max_namd = float(self.state.timings.max_namd_cycle_time_s or 0.0)
+                gomc_t = float(self.state.timings.gomc_cycle_time_s or 0.0)
+                python_only_time_s = round(cycle_run_time_s - (max_namd + gomc_t), 6)
+
+                # Header once (first completed cycle)
+                if run_no == starting_sims + 1:
+                    header = (
+                        "*************************************************\n"
+                        "TIME_STATS_TITLE:\t#Cycle_No\t\tNAMD_time_s\t\t"
+                        "GOMC_time_s\t\tPython_time_s\t\tTotal_time_s\n"
+                    )
+                    self._time_stats_lines.append(header)
+                    self.logger.info(header.rstrip("\n"))
+
+                cycle_no = int(run_no / 2)
+                data = (
+                    f"TIME_STATS_DATA:\t{cycle_no}\t\t{max_namd}\t\t{gomc_t}\t\t"
+                    f"{python_only_time_s}\t\t{cycle_run_time_s}\n"
+                )
+                self._time_stats_lines.append(data)
+                self.logger.info(data.rstrip("\n"))
 
             self.logger.info(
                 "*************************************************\n"
@@ -300,6 +360,7 @@ class SimulationOrchestrator:
             "total_sims_namd_gomc": self.total_sims_namd_gomc,
             "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
             "state": self.state.snapshot(),
+            "time_stats_lines": self._time_stats_lines,
         }
         return summary
 

@@ -20,6 +20,7 @@ from engines.namd.energy_compare import compare_namd_gomc_energies
 
 from utils.subprocess_runner import Command, SubprocessRunner
 from orchestrator.state import RunState
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -163,8 +164,15 @@ class GomcEngine(BaseEngine):
             stdout_path=Path(gomc_newdir) / "out.dat",
         )
 
+        # h = self.runner.start(cmd)
+        # rc = self.runner.wait(h)
+        t0 = time.perf_counter()
         h = self.runner.start(cmd)
         rc = self.runner.wait(h)
+        gomc_cycle_time_s = time.perf_counter() - t0
+
+        state.timings.gomc_cycle_time_s = round(gomc_cycle_time_s, 6)
+
         if rc != 0 and not self.dry_run:
             raise RuntimeError(f"GOMC failed (rc={rc}) for run_no={run_no} in {gomc_newdir}")
 
