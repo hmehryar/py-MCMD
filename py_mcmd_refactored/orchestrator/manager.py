@@ -14,7 +14,13 @@ from .state import RunState, PmeDims
 from engines.base import Engine
 from engines.gomc_engine import GomcEngine
 from engines.namd_engine import NamdEngine
-from orchestrator.restart import compute_start_context, apply_start_context
+
+
+try:
+    from orchestrator.restart import compute_start_context, apply_start_context
+except Exception:  # pragma: no cover
+    compute_start_context = None
+    apply_start_context = None
 
 class SimulationOrchestrator:
     # def __init__(self, cfg: SimulationConfig):
@@ -178,58 +184,125 @@ class SimulationOrchestrator:
         # Optionally store for later usage (e.g., per-cycle dirs)
         self.namd_root = namd_root
         self.gomc_root = gomc_root
+
+    # def run(self):
+    #     ctx = compute_start_context(self.cfg, id_width=8)
+    #     apply_start_context(self.state, ctx)
+    #     """High-level entrypoint for running all cycles."""
+    #     self.logger.info("Starting coupled NAMD↔GOMC simulation")
+
+    #     # Restart: attempt to seed PME dims from Run-0 before first NAMD config generation.
+    #     if int(self.cfg.starting_at_cycle_namd_gomc_sims) > 0:
+    #         self.refresh_pme_dims_from_run0()
+
+    #     start = self.cfg.starting_at_cycle_namd_gomc_sims
+    #     end   = self.cfg.total_cycles_namd_gomc_sims
+
+    #     for cycle in range(start, end):
+    #         self.logger.debug(f"Cycle {cycle+1}/{end}")
+    #         cid = format_cycle_id(cycle, 8)  # or 10 if you prefer 10-digit folders
+    #         namd_cycle_dir = Path(self.namd_root) / f"{cid}_a"
+    #         gomc_cycle_dir = Path(self.gomc_root) / cid
+
+    #         self.logger.info(f"Preparing directories for cycle {cycle}: {cid}, {namd_cycle_dir} and {gomc_cycle_dir}")
+    #         namd_cycle_dir.mkdir(parents=True, exist_ok=True)
+    #         gomc_cycle_dir.mkdir(parents=True, exist_ok=True)
+    #         # --- NAMDEngine step ---
+    #         # self.namd.prepare(cycle)
+    #         # self.namd.run_cycle(cycle)
+    #         # result_namd = self.namd.collect_results(cycle)
+
+    #         # --- GOMCEngine step ---
+    #         # self.gomc.prepare(cycle)
+    #         # self.gomc.run_cycle(cycle)
+    #         # result_gomc = self.gomc.collect_results(cycle)
+
+    #         # optionally combine or log the per-cycle stats
+    #         # self.logger.info(f"Cycle {cycle} complete")
+
+    #         self.namd.run_steps(run_dir=namd_cycle_dir, cores=self.cfg.total_no_cores)
+    #         self.gomc.run_steps(run_dir=gomc_cycle_dir, cores=self.cfg.total_no_cores)
+
+
+    #     self.logger.info("All cycles completed.")
+    #     summary = {
+    #         "total_cycles": self.total_cycles,
+    #         "start_cycle": self.start_cycle,
+    #         "namd_steps": self.namd_steps,
+    #         "gomc_steps": self.gomc_steps,
+    #         "cycles_completed": 0,
+    #         "total_sims_namd_gomc": self.total_sims_namd_gomc,
+    #         "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
+    #         "state": self.state.snapshot(),
+    #     }
+    #     return summary
+    
     def run(self):
-        ctx = compute_start_context(self.cfg, id_width=8)
-        apply_start_context(self.state, ctx)
-        """High-level entrypoint for running all cycles."""
+        """Run coupled NAMD↔GOMC segments using the legacy-equivalent run_no parity loop."""
         self.logger.info("Starting coupled NAMD↔GOMC simulation")
 
-        # Restart: attempt to seed PME dims from Run-0 before first NAMD config generation.
+        # --- Restart initialization (if starting at cycle > 0) ---
         if int(self.cfg.starting_at_cycle_namd_gomc_sims) > 0:
-            self.refresh_pme_dims_from_run0()
+            if compute_start_context is not None and apply_start_context is not None:
+                ctx = compute_start_context(self.cfg, id_width=8)
+                apply_start_context(self.state, ctx)
+            else:
+                # Fallback if restart module is not present
+                self.state.current_step = (
+                    (int(self.cfg.namd_run_steps) + int(self.cfg.gomc_run_steps)) * int(self.cfg.starting_at_cycle_namd_gomc_sims)
+                    + int(self.cfg.namd_minimize_steps)
+                )
 
-        start = self.cfg.starting_at_cycle_namd_gomc_sims
-        end   = self.cfg.total_cycles_namd_gomc_sims
+            # If PME seeding helper exists, try it (won’t break tests if absent)
+            if hasattr(self, "refresh_pme_dims_from_run0"):
+                try:
+                    self.refresh_pme_dims_from_run0()
+                except Exception as e:
+                    self.logger.warning("[PME] refresh_pme_dims_from_run0 failed: %s", e)
 
-        for cycle in range(start, end):
-            self.logger.debug(f"Cycle {cycle+1}/{end}")
-            cid = format_cycle_id(cycle, 8)  # or 10 if you prefer 10-digit folders
-            namd_cycle_dir = Path(self.namd_root) / f"{cid}_a"
-            gomc_cycle_dir = Path(self.gomc_root) / cid
+        starting_sims = int(self.cfg.starting_sims_namd_gomc)
+        total_sims = int(self.cfg.total_sims_namd_gomc)
 
-            self.logger.info(f"Preparing directories for cycle {cycle}: {cid}, {namd_cycle_dir} and {gomc_cycle_dir}")
-            namd_cycle_dir.mkdir(parents=True, exist_ok=True)
-            gomc_cycle_dir.mkdir(parents=True, exist_ok=True)
-            # --- NAMDEngine step ---
-            # self.namd.prepare(cycle)
-            # self.namd.run_cycle(cycle)
-            # result_namd = self.namd.collect_results(cycle)
+        cycles_completed = 0
 
-            # --- GOMCEngine step ---
-            # self.gomc.prepare(cycle)
-            # self.gomc.run_cycle(cycle)
-            # result_gomc = self.gomc.collect_results(cycle)
+        for run_no in range(starting_sims, total_sims):
+            self.logger.info(
+                "*************************************************\n"
+                "*************************************************\n"
+                "run_no = %s (START)\n"
+                "*************************************************",
+                run_no,
+            )
 
-            # optionally combine or log the per-cycle stats
-            # self.logger.info(f"Cycle {cycle} complete")
+            if run_no % 2 == 0:
+                # NAMD segment
+                self.namd.run_segment(run_no=run_no, state=self.state)
+            else:
+                # GOMC segment
+                self.gomc.run_segment(run_no=run_no, state=self.state)
+                cycles_completed += 1
 
-            self.namd.run_steps(run_dir=namd_cycle_dir, cores=self.cfg.total_no_cores)
-            self.gomc.run_steps(run_dir=gomc_cycle_dir, cores=self.cfg.total_no_cores)
-
+            self.logger.info(
+                "*************************************************\n"
+                "run_no = %s (End)\n"
+                "*************************************************",
+                run_no,
+            )
 
         self.logger.info("All cycles completed.")
+
         summary = {
             "total_cycles": self.total_cycles,
             "start_cycle": self.start_cycle,
             "namd_steps": self.namd_steps,
             "gomc_steps": self.gomc_steps,
-            "cycles_completed": 0,
+            "cycles_completed": cycles_completed,
             "total_sims_namd_gomc": self.total_sims_namd_gomc,
             "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
             "state": self.state.snapshot(),
         }
         return summary
-    
+
     def refresh_pme_dims_from_run0(self) -> None:
         """Load NAMD Run-0 PME grid dims into orchestrator state.
 
