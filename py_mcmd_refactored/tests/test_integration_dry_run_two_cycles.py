@@ -110,14 +110,26 @@ def test_integration_dry_run_two_cycles(tmp_path: Path, monkeypatch):
     # ---------------------------
     import engines.gomc_engine as ge
 
-    def fake_write_gomc_conf_file(
-        python_file_directory,
-        path_gomc_runs,
-        run_no,
-        *args,
-        **kwargs,
-    ):
-        root = Path(path_gomc_runs)
+    # def fake_write_gomc_conf_file(
+    #     python_file_directory,
+    #     path_gomc_runs,
+    #     run_no,
+    #     *args,
+    #     **kwargs,
+    # ):
+    #     root = Path(path_gomc_runs)
+    #     root.mkdir(parents=True, exist_ok=True)
+    #     run_dir = root / f"run_{int(run_no):02d}"
+    #     run_dir.mkdir(parents=True, exist_ok=True)
+    #     (run_dir / "in.conf").write_text("# dummy gomc\n", encoding="utf-8")
+    #     return str(run_dir)
+
+    # monkeypatch.setattr(ge, "write_gomc_conf_file", fake_write_gomc_conf_file)
+    import engines.gomc_engine as ge
+    from pathlib import Path
+
+    def fake_write_gomc_conf_file(cfg, io, run_no, sim, starts):
+        root = Path(io.path_gomc_runs)
         root.mkdir(parents=True, exist_ok=True)
         run_dir = root / f"run_{int(run_no):02d}"
         run_dir.mkdir(parents=True, exist_ok=True)

@@ -362,10 +362,32 @@ class NamdEngine(BaseEngine):
 
         gomc_newdir = str(state.gomc_dir) if state.gomc_dir is not None else "NA"
 
-        # 1) Write NAMD config(s)
-        python_file_directory = Path.cwd()
+        
 
         self._ensure_pme_dims_for_dry_run(state)
+        
+        # --- Ensure namd_writer globals are wired from config (required for real runs) ---
+        from pathlib import Path
+        from engines.namd import namd_writer as nw
+
+        # Resolve FF/parameter files from config (must not be empty for real NAMD runs)
+        ff_files = getattr(self.cfg, "starting_ff_file_list_namd", None) or []
+        if not ff_files:
+            raise ValueError(
+                "No NAMD parameter files provided. Set `starting_ff_file_list_namd` "
+                "in user_input_NAMD_GOMC.json to one or more CHARMM parameter files."
+            )
+
+        root = Path.cwd()  # repo root where you run the CLI
+        nw.starting_ff_file_list_namd = [
+            (root / f).resolve() if not Path(f).is_absolute() else Path(f).resolve()
+            for f in ff_files
+        ]
+
+        # namd_writer also uses this global when computing PME behavior
+        nw.simulation_type = self.cfg.simulation_type
+        # 1) Write NAMD config(s)
+        python_file_directory = Path.cwd()
         
         namd_box0_dir = write_namd_conf_file(
             python_file_directory,

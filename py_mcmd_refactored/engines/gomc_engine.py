@@ -83,7 +83,7 @@ class GomcEngine(BaseEngine):
         self.path_template = Path(cfg.path_gomc_template) if cfg.path_gomc_template else None
 
         exe_name = "GOMC_GPU" if cfg.gomc_use_CPU_or_GPU == "GPU" else "GOMC_CPU"
-
+        
         if self.bin_dir.exists():
             self.exec_path = str((self.bin_dir / exe_name).resolve())
             self.exec_name = exe_name
