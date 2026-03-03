@@ -162,6 +162,15 @@ class SimulationOrchestrator:
             "\n*************************************************\n"
         )
 
+    def _emit_end_header(self) -> None:
+        end_time = datetime.today()
+        msg = (
+            "\n*************************************************\n"
+            f"date and time (end) = {end_time}\n"
+            "\n*************************************************\n"
+        )
+        self.logger.info(msg)
+        
     def _prepare_run_dirs(self) -> None:
         """Create NAMD/GOMC root folders; warn if they already exist (stale run risk)."""
         namd_root = self.cfg.path_namd_runs
@@ -362,6 +371,7 @@ class SimulationOrchestrator:
             "state": self.state.snapshot(),
             "time_stats_lines": self._time_stats_lines,
         }
+        self._emit_end_header()
         return summary
 
     def refresh_pme_dims_from_run0(self) -> None:

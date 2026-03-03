@@ -365,6 +365,8 @@ class NamdEngine(BaseEngine):
         # 1) Write NAMD config(s)
         python_file_directory = Path.cwd()
 
+        self._ensure_pme_dims_for_dry_run(state)
+        
         namd_box0_dir = write_namd_conf_file(
             python_file_directory,
             self.cfg.path_namd_template,
@@ -411,7 +413,21 @@ class NamdEngine(BaseEngine):
                 fft_add_namd_ang_to_box_dim=0,
             )
             state.namd_box1_dir = Path(namd_box1_dir)
+        
 
+        if self.dry_run:
+            # Box 0 placeholders (use configured dims)
+            self._ensure_dry_run_restart_files(
+                Path(state.namd_box0_dir),
+                self.cfg.set_dims_box_0_list,
+            )
+
+            # Box 1 placeholders if two-box NAMD is enabled
+            if getattr(state, "namd_box1_dir", None) is not None:
+                self._ensure_dry_run_restart_files(
+                    Path(state.namd_box1_dir),
+                    self.cfg.set_dims_box_1_list,
+                )
         # 2) FFT housekeeping
         if run_no == 0:
             self.delete_namd_run_0_fft_file(box0)
@@ -582,3 +598,29 @@ class NamdEngine(BaseEngine):
             "namd_box0_dir": str(namd_box0_dir),
             "namd_box1_dir": str(namd_box1_dir) if namd_box1_dir is not None else None,
         }
+    
+    def _ensure_dry_run_restart_files(self, run_dir: Path, dims_xyz) -> None:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "namdOut.restart.coor").touch(exist_ok=True)
+        (run_dir / "namdOut.restart.vel").touch(exist_ok=True)
+
+        xsc = run_dir / "namdOut.restart.xsc"
+        if not xsc.exists():
+            x, y, z = [float(v) for v in dims_xyz]
+            # xsc parser expects last line tokens with indices 1,5,9 = Lx,Ly,Lz
+            xsc.write_text(f"0 {x} 0 0 0 {y} 0 0 0 {z}\n", encoding="utf-8")
+
+
+    def _ensure_pme_dims_for_dry_run(self, state) -> None:
+        """Ensure PME dims exist in dry_run so namd_writer can compute PME grid."""
+        if not self.dry_run:
+            return
+
+        # If PME dims are missing, use a deterministic default.
+        # Values should be reasonable multiples of small primes.
+        if state.pme_box0.x is None or state.pme_box0.y is None or state.pme_box0.z is None:
+            state.pme_box0.x, state.pme_box0.y, state.pme_box0.z = 48, 48, 48
+
+        if self.cfg.simulation_type == "GEMC" and (self.cfg.only_use_box_0_for_namd_for_gemc is False):
+            if state.pme_box1.x is None or state.pme_box1.y is None or state.pme_box1.z is None:
+                state.pme_box1.x, state.pme_box1.y, state.pme_box1.z = 48, 48, 48

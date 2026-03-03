@@ -55,6 +55,11 @@ def parse_args(argv=None):
         action="store_true",
         help="Enable debug logging"
     )
+    arg_parser.add_argument(
+        "--dry_run",
+        action="store_true",
+        help="Do not execute NAMD/GOMC binaries. Still generates inputs and runs orchestration logic.",
+    )
     # return arg_parser.parse_args()
     args = arg_parser.parse_args(argv)
 
@@ -112,7 +117,7 @@ def main():
     cfg = cfg.model_copy(update={"namd_simulation_order": args.namd_simulation_order})
 
     # hand off to the orchestrator
-    sim = SimulationOrchestrator(cfg)
+    sim = SimulationOrchestrator(cfg, dry_run=args.dry_run)
     logging.info("Configuration loaded and orchestrator constructed successfully.")
 
     sim.run()  # or sim.execute_cycles()

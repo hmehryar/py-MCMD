@@ -12,7 +12,12 @@ from typing import Optional
 
 from engines.base import Engine as BaseEngine
 
-from engines.gomc.gomc_writer import write_gomc_conf_file
+from engines.gomc.gomc_writer import (
+    write_gomc_conf_file,
+    GOMCIOPaths,
+    GOMCSimParams,
+    GOMCStartFiles,
+)
 from engines.gomc.energy_parse import get_gomc_energy_data
 from engines.gomc.energy_metrics import get_gomc_energy_data_kcal_per_mol
 
@@ -138,22 +143,56 @@ class GomcEngine(BaseEngine):
 
         python_file_directory = Path.cwd()
 
+        io = GOMCIOPaths(
+            python_file_directory=python_file_directory,
+            path_gomc_runs=Path(self.cfg.path_gomc_runs),
+            path_gomc_template=Path(self.cfg.path_gomc_template),
+            namd_box_0_dir=Path(state.namd_box0_dir),
+            namd_box_1_dir=Path(state.namd_box1_dir) if getattr(state, "namd_box1_dir", None) else None,
+            previous_gomc_dir=Path(state.gomc_dir) if getattr(state, "gomc_dir", None) else None,
+        )
+
+        sim = GOMCSimParams(
+            gomc_run_steps=int(self.cfg.gomc_run_steps),
+            gomc_rst_coor_ckpoint_steps=int(self.cfg.gomc_rst_coor_ckpoint_steps),
+            gomc_console_blkavg_hist_steps=int(self.cfg.gomc_console_blkavg_hist_steps),
+            gomc_hist_sample_steps=int(self.cfg.gomc_hist_sample_steps),
+            simulation_temp_k=float(self.cfg.simulation_temp_k),
+            simulation_pressure_bar=float(self.cfg.simulation_pressure_bar),
+        )
+
+        starts = GOMCStartFiles(
+            starting_pdb_box_0_file=Path(self.cfg.starting_pdb_box_0_file),
+            starting_pdb_box_1_file=Path(self.cfg.starting_pdb_box_1_file),
+            starting_psf_box_0_file=Path(self.cfg.starting_psf_box_0_file),
+            starting_psf_box_1_file=Path(self.cfg.starting_psf_box_1_file),
+        )
+
         # 1) Write GOMC config
         gomc_newdir = write_gomc_conf_file(
-            python_file_directory,
-            self.cfg.path_gomc_runs,
-            run_no,
-            self.cfg.gomc_run_steps,
-            self.cfg.gomc_rst_coor_ckpoint_steps,
-            self.cfg.gomc_console_blkavg_hist_steps,
-            self.cfg.gomc_hist_sample_steps,
-            self.cfg.simulation_temp_k,
-            self.cfg.simulation_pressure_bar,
-            self.cfg.starting_pdb_box_0_file,
-            self.cfg.starting_pdb_box_1_file,
-            self.cfg.starting_psf_box_0_file,
-            self.cfg.starting_psf_box_1_file,
+            cfg=self.cfg,
+            io=io,
+            run_no=int(run_no),
+            sim=sim,
+            starts=starts,
         )
+
+        
+        # gomc_newdir = write_gomc_conf_file(
+        #     python_file_directory,
+        #     self.cfg.path_gomc_runs,
+        #     run_no,
+        #     self.cfg.gomc_run_steps,
+        #     self.cfg.gomc_rst_coor_ckpoint_steps,
+        #     self.cfg.gomc_console_blkavg_hist_steps,
+        #     self.cfg.gomc_hist_sample_steps,
+        #     self.cfg.simulation_temp_k,
+        #     self.cfg.simulation_pressure_bar,
+        #     self.cfg.starting_pdb_box_0_file,
+        #     self.cfg.starting_pdb_box_1_file,
+        #     self.cfg.starting_psf_box_0_file,
+        #     self.cfg.starting_psf_box_1_file,
+        # )
 
         state.gomc_dir = Path(gomc_newdir)
 
@@ -169,10 +208,18 @@ class GomcEngine(BaseEngine):
         t0 = time.perf_counter()
         h = self.runner.start(cmd)
         rc = self.runner.wait(h)
+
         gomc_cycle_time_s = time.perf_counter() - t0
 
         state.timings.gomc_cycle_time_s = round(gomc_cycle_time_s, 6)
+        if self.dry_run:
+            # Create restart files that the next NAMD segment expects from the previous GOMC run.
+            self._ensure_dry_run_gomc_restart_files(Path(gomc_newdir), box_number=0)
 
+            # If the workflow uses two boxes, also create BOX_1 restart files.
+            if self._two_box_enabled():
+                self._ensure_dry_run_gomc_restart_files(Path(gomc_newdir), box_number=1)
+                
         if rc != 0 and not self.dry_run:
             raise RuntimeError(f"GOMC failed (rc={rc}) for run_no={run_no} in {gomc_newdir}")
 
@@ -274,3 +321,45 @@ class GomcEngine(BaseEngine):
             "gomc_dir": str(gomc_newdir),
             "previous_gomc_dir": previous_gomc_dir,
         }
+    
+    def _ensure_dry_run_gomc_restart_files(self, gomc_dir: Path, box_number: int) -> None:
+        """Create minimal GOMC restart files required by the next NAMD segment in dry_run."""
+        gomc_dir = Path(gomc_dir)
+        gomc_dir.mkdir(parents=True, exist_ok=True)
+
+        pdb_name = f"Output_data_BOX_{box_number}_restart.pdb"
+        psf_name = f"Output_data_BOX_{box_number}_restart.psf"
+
+        pdb_path = gomc_dir / pdb_name
+        psf_path = gomc_dir / psf_name
+
+        # Prefer copying real starting files if they exist (more realistic), else create minimal placeholders.
+        if box_number == 0:
+            start_pdb = Path(self.cfg.starting_pdb_box_0_file)
+            start_psf = Path(self.cfg.starting_psf_box_0_file)
+            dims = self.cfg.set_dims_box_0_list
+            angs = self.cfg.set_angle_box_0_list
+        else:
+            start_pdb = Path(self.cfg.starting_pdb_box_1_file)
+            start_psf = Path(self.cfg.starting_psf_box_1_file)
+            dims = self.cfg.set_dims_box_1_list
+            angs = self.cfg.set_angle_box_1_list
+
+        if not pdb_path.exists():
+            if start_pdb.exists():
+                pdb_path.write_text(start_pdb.read_text(), encoding="utf-8")
+            else:
+                # Minimal PDB with CRYST1 so downstream code can read box dimensions if needed
+                x, y, z = [float(v) for v in dims]
+                a, b, c = [float(v) for v in angs]
+                pdb_path.write_text(
+                    f"CRYST1{x:9.3f}{y:9.3f}{z:9.3f}{a:7.2f}{b:7.2f}{c:7.2f} P 1           1\nEND\n",
+                    encoding="utf-8",
+                )
+
+        if not psf_path.exists():
+            if start_psf.exists():
+                psf_path.write_text(start_psf.read_text(), encoding="utf-8")
+            else:
+                # Minimal placeholder; typically the writer just references this path
+                psf_path.write_text("PSF\n", encoding="utf-8")
