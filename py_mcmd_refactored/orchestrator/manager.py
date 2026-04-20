@@ -4,9 +4,12 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from version import get_version
+
 from utils.path import format_cycle_id
 from config.models import SimulationConfig
 from .state import RunState, PmeDims
+
 
 # you’ll wire in your engines once they exist:
 # from engines.namd_engine import NAMDEngine
@@ -175,6 +178,13 @@ class SimulationOrchestrator:
 
     def _emit_start_header(self) -> None:
         start_time = datetime.today()
+        
+        version = get_version()
+        self.logger.info(
+            "\n*************************************************\n"
+            f"py-MCMD framework version = {version}\n"
+            "*************************************************\n"
+        )
         msg = (
             "\n*************************************************\n"
             f"date and time (start) = {start_time}\n"

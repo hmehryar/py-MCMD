@@ -23,7 +23,7 @@ for p in (str(REPO_ROOT), str(PROJECT_ROOT)):
 
 # sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 
-
+from py_mcmd_refactored.version import get_version
 from config.models import load_simulation_config
 from orchestrator.manager import SimulationOrchestrator
 
@@ -34,6 +34,11 @@ def parse_args(argv=None):
     arg_parser = argparse.ArgumentParser(
         prog="py-mcmd",
         description="Run coupled NAMD ↔ GOMC simulations based on a JSON spec",
+    )
+    arg_parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_version()}",
     )
     # get the filename with the user required input
     arg_parser.add_argument(
