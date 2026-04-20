@@ -10,9 +10,9 @@ Stable releases use:
 
 Examples:
 
-- `0.1.0`
-- `0.2.3`
-- `1.0.0`
+- `2.0.0`
+- `2.1.0`
+- `2.1.1`
 
 Pre-release and development versions use PEP 440-compatible suffixes:
 
@@ -69,3 +69,41 @@ This indicates an early but usable release of the refactored architecture.
 - Version strings must not be duplicated manually across multiple code files.
 - User-facing version output must always come from the same authoritative version source.
 
+## Single source of truth
+
+The authoritative framework version lives in:
+
+`py_mcmd_refactored/version.py`
+
+That module defines:
+
+- `__version__`
+- `get_version()`
+
+The package root re-exports the version helpers from:
+
+`py_mcmd_refactored/__init__.py`
+
+## User-visible version exposure
+
+The framework version is exposed in two places:
+
+1. **CLI**
+   - `python -m py_mcmd_refactored.cli.main --version`
+
+2. **Startup flow**
+   - the orchestrator startup logging emits the framework version at the beginning of a run
+
+## How to bump the version
+
+When preparing a new release:
+
+### 1. Update the authoritative version
+Edit:
+
+`py_mcmd_refactored/version.py`
+
+Change:
+
+```python
+__version__ = "2.1.0"
