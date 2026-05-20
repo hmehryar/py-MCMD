@@ -1,4 +1,3 @@
-# engines/namd/dimensions.py
 from __future__ import annotations
 from typing import Optional, Union
 from logging import Logger

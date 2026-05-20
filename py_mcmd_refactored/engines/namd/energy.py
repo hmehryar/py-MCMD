@@ -1,4 +1,8 @@
-# py_mcmd_refactored/engines/namd/energy.py
+# py-MCMD
+# Author: Haydar Mehryar 
+# Copyright (c) 2025
+# SPDX-License-Identifier: MIT
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, List, Tuple
@@ -38,6 +42,8 @@ def _extract_titles_and_rows(
     Parse ETITLE/ENERGY sections:
       - First ETITLE line → titles (kept as tokens, including 'ETITLE:')
       - All ENERGY lines → numeric rows; insert NaN at col0 to align with titles
+    Parse ETITLE/ENERGY sections into aligned title and numeric rows.
+    Backward-compatible façade returning the legacy 9-tuple.
     Raises:
       ValueError if no ENERGY lines found.
     """

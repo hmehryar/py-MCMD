@@ -56,7 +56,6 @@ class NamdEngine(BaseEngine):
     # -------------------------------------------------------------------------
     # Run-0 PME helpers
     # -------------------------------------------------------------------------
-    # def get_run0_pme_dims(self, box_number: int)-> tuple[Optional[int], Optional[int], Optional[int], str]:
     def get_run0_pme_dims(
         self,
         box_number: int,
@@ -72,7 +71,7 @@ class NamdEngine(BaseEngine):
         # Run 0 directory name (zero-padded run id + suffix a/b)
         run0_id = format_cycle_id(0) # default width in utils.path is 10
         suffix = "a" if box_number == 0 else "b"
-        # run0_dir = Path(self.cfg.path_namd_runs) / f"{run0_id}_{suffix}"
+
         root = Path(run_root) if run_root is not None else Path(self.cfg.path_namd_runs)
         run0_dir = root / f"{run0_id}_{suffix}"
 
@@ -87,28 +86,7 @@ class NamdEngine(BaseEngine):
     # -------------------------------------------------------------------------
     # Run-0 FFT helpers (with 10-digit→8-digit fallback)
     # -------------------------------------------------------------------------
-    # def get_run0_fft_filename(self, box_number: int) -> tuple[Optional[str], str]:
-        # """
-        # Returns (fft_filename or None, run0_dir_path_str) for box_number ∈ {0, 1}.
-        # Never raises for missing dir/file; logs a warning and returns (None, dir).
-        # """
-        # if not isinstance(box_number, int) or box_number not in (0, 1):
-        #     raise ValueError("box_number must be integer 0 or 1")
-        # # Prefer 10-digit run0 dir (matches PME test), fallback to 8-digit (matches older FFT tests)
-        # for width in (10, 8):
-        #     run0_dir = get_run0_dir(Path(self.cfg.path_namd_runs), box_number, id_width=width)
-        #     try:
-        #         # Reuse your existing helper already in this module:
-        #         fft_name = find_run0_fft_filename(run0_dir)
-        #         return fft_name, str(run0_dir)
-        #     except FileNotFoundError:
-        #         continue
-        # # if neither exists, mirror legacy-like behavior by raising
-        # raise FileNotFoundError("Run-0 directory does not exist for FFT lookup.")
-        # # if fft_name is None:
-        # #     logger.warning("[NAMD] FFTW plan file not detected in run0 dir %s (box=%s)", run0_dir, box_number)
-    
-    # def get_run0_fft_filename(self, box_number: int) -> tuple[Optional[str], str]:
+
     def get_run0_fft_filename(
         self,
         box_number: int,
@@ -130,7 +108,6 @@ class NamdEngine(BaseEngine):
         widths_to_try = (8, 10)
 
         for width in widths_to_try:
-            # run0_dir = get_run0_dir(Path(self.cfg.path_namd_runs), box_number, id_width=width)
             base_root = Path(run_root) if run_root is not None else Path(self.cfg.path_namd_runs)
             run0_dir = get_run0_dir(base_root, box_number, id_width=width)
 
@@ -158,8 +135,6 @@ class NamdEngine(BaseEngine):
 
 
         
-
-    # def delete_namd_run_0_fft_file(self, box_number: int) -> None:
     def delete_namd_run_0_fft_file(self, box_number: int, run_root: Optional[Path] = None) -> None:
         """
         Deletes the run 0 (1st NAMD simulation) FFT filename.
@@ -184,13 +159,6 @@ class NamdEngine(BaseEngine):
 
         try:
             # Use the parser to locate the FFT file and directory
-            # fft_filename, run0_dir = self.get_run0_fft_filename(
-            #     box_number=box_number
-            # )
-            # fft_filename, run0_dir = self.get_run0_fft_filename(
-            #     box_number=box_number,
-            #     run_root=run_root,
-            # )
 
             fft_filename, run0_dir = self._get_run0_fft_filename_compat(
                 box_number=box_number,
@@ -219,30 +187,6 @@ class NamdEngine(BaseEngine):
             logger.info(write_log_data.strip("\n"))
             print(write_log_data)
 
-    
-    # from engines.namd.energy_compare import compare_namd_gomc_energies
-
-    # # inside your engine method:
-    # compare_namd_gomc_energies(
-    #     self.cfg,  # SimulationConfig
-    #     pot_final, pot_initial,
-    #     vpe_final, vpe_initial,
-    #     run_no, box_number,
-    # )
-
-    # def run_steps(self, *, run_dir: Path, cores: int) -> int:
-    #     # cmd = Command(
-    #     #     argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
-    #     #     cwd=Path(run_dir),
-    #     #     stdout_path=Path(run_dir) / "out.dat",
-    #     # )
-        
-    #     cmd = Command(
-    #         argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
-    #         cwd=Path(run_dir),
-    #         stdout_path=persisted_output_path("NAMD", run_dir, "out.dat"),
-    #     )
-    #     return self.runner.run_and_wait(cmd)
 
     def run_steps(
         self,
@@ -320,98 +264,7 @@ class NamdEngine(BaseEngine):
         shutil.copy2(src, dst)
         logger.info("[NAMD] Cached run0 FFT file for box=%s: %s -> %s", box_number, src, dst)
         return dst
-    # def link_run0_fft_file_into_dir(self, box_number: int, dest_dir: Path) -> None:
-    # def link_run0_fft_file_into_dir(
-    #     self,
-    #     box_number: int,
-    #     dest_dir: Path,
-    #     run_root: Optional[Path] = None,
-    # ) -> None:
-    # def link_run0_fft_file_into_dir(
-    #     self,
-    #     box_number: int,
-    #     dest_dir: Path,
-    #     run_root: Optional[Path] = None,
-    #     managed_root: Optional[Path] = None,
-    # ) -> None:
-    #     """Link (symlink) the Run-0 FFTW plan file into a later NAMD run directory.
-
-    #     Legacy behavior used: `ln -sf <run0_dir>/<fft_file> <dest_dir>` which creates/overwrites
-    #     a symlink inside `dest_dir`.
-
-    #     - If the Run-0 FFT file is not found, this is a no-op (with a warning).
-    #     - If the destination already exists (file/symlink), it is replaced.
-    #     """
-    #     if not isinstance(box_number, int) or box_number not in (0, 1):
-    #         raise ValueError("box_number must be integer 0 or 1")
-
-    #     dest_dir = Path(dest_dir)
-    #     dest_dir.mkdir(parents=True, exist_ok=True)
-
-    #     # fft_filename, run0_dir = self.get_run0_fft_filename(box_number)
-    #     # fft_filename, run0_dir = self.get_run0_fft_filename(box_number, run_root=run_root)
-    #     # fft_filename, run0_dir = self._get_run0_fft_filename_compat(
-    #     #     box_number,
-    #     #     run_root=run_root,
-    #     # )
-    #     # if not fft_filename:
-    #     #     logger.warning(
-    #     #         "[NAMD] Cannot link run0 FFT file: none detected for box=%s (run0_dir=%s)",
-    #     #         box_number,
-    #     #         run0_dir,
-    #     #     )
-    #     #     return
-
-    #     # src = Path(run0_dir) / fft_filename
-    #     fft_filename = None
-    #     run0_dir = None
-
-    #     if managed_root is not None:
-    #         cached_fft_filename, cached_dir = self.get_cached_run0_fft_filename(
-    #             box_number,
-    #             managed_root=Path(managed_root),
-    #         )
-    #         if cached_fft_filename:
-    #             fft_filename = cached_fft_filename
-    #             run0_dir = cached_dir
-
-    #     if fft_filename is None:
-    #         fft_filename, run0_dir = self._get_run0_fft_filename_compat(
-    #             box_number,
-    #             run_root=run_root,
-    #         )
-
-    #     if not fft_filename:
-    #         logger.warning(
-    #             "[NAMD] Cannot link run0 FFT file: none detected for box=%s (run0_dir=%s)",
-    #             box_number,
-    #             run0_dir,
-    #         )
-    #         return
-
-    #     src = Path(run0_dir) / fft_filename
-    #     dst = dest_dir / fft_filename
-
-    #     # Mirror `ln -sf`: remove existing destination entry if present.
-    #     try:
-    #         if dst.is_symlink() or dst.is_file():
-    #             dst.unlink()
-    #     except FileNotFoundError:
-    #         pass
-
-    #     if dst.exists() and dst.is_dir():
-    #         raise IsADirectoryError(f"Destination path {dst} is a directory; cannot overwrite with symlink")
-
-    #     # If source is missing, raise unless dry_run (then create a placeholder).
-    #     if not src.exists():
-    #         if self.dry_run:
-    #             src.parent.mkdir(parents=True, exist_ok=True)
-    #             src.write_text("[dry_run] missing FFTW plan placeholder\n")
-    #         else:
-    #             raise FileNotFoundError(f"Run-0 FFT file not found: {src}")
-
-    #     dst.symlink_to(src)
-    #     logger.info("[NAMD] Linked run0 FFT file for box=%s: %s -> %s", box_number, dst, src)
+    
 
 
     def link_run0_fft_file_into_dir(
@@ -643,12 +496,7 @@ class NamdEngine(BaseEngine):
                 # self.delete_namd_run_0_fft_file(box1)
                 self.delete_namd_run_0_fft_file(box1, run_root=runtime_namd_root)
         else:
-            # self.link_run0_fft_file_into_dir(box0, Path(namd_box0_dir))
-            # self.link_run0_fft_file_into_dir(
-            #     box0,
-            #     Path(namd_box0_dir),
-            #     run_root=runtime_namd_root,
-            # )
+            
             self.link_run0_fft_file_into_dir(
                 box0,
                 Path(namd_box0_dir),
@@ -656,12 +504,7 @@ class NamdEngine(BaseEngine):
                 managed_root=managed_root,
             )
             if two_box and namd_box1_dir is not None:
-                # self.link_run0_fft_file_into_dir(box1, Path(namd_box1_dir))
-                # self.link_run0_fft_file_into_dir(
-                #     box1,
-                #     Path(namd_box1_dir),
-                #     run_root=runtime_namd_root,
-                # )
+                
                 self.link_run0_fft_file_into_dir(
                     box1,
                     Path(namd_box1_dir),
@@ -674,27 +517,6 @@ class NamdEngine(BaseEngine):
         mode = self.cfg.namd_simulation_order if two_box else "series"
 
         cores0 = int(self.cfg.total_no_cores) if (not two_box or mode == "series") else int(self.cfg.no_core_box_0)
-        # cmd0 = Command(
-        #     argv=[str(self.exec_path), f"+p{cores0}", "in.conf"],
-        #     cwd=Path(namd_box0_dir),
-        #     stdout_path=Path(namd_box0_dir) / "out.dat",
-        # )
-        
-        # cmd0 = Command(
-        #     argv=[str(self.exec_path), f"+p{cores0}", "in.conf"],
-        #     cwd=Path(namd_box0_dir),
-        #     stdout_path=persisted_output_path("NAMD", namd_box0_dir, "out.dat"),
-        # )
-
-        # cmd0 = Command(
-        #     argv=[str(self.exec_path), f"+p{cores0}", "in.conf"],
-        #     cwd=Path(namd_box0_dir),
-        #     **self._stdout_command_kwargs(
-        #         run_dir=Path(namd_box0_dir),
-        #         fifo_resources=fifo_resources,
-        #         fifo_basename="box0.out.dat",
-        #     ),
-        # )
 
         disk_box0_dir = self._disk_namd_dir(fifo_resources, 0, run_no)
         disk_box0_dir.mkdir(parents=True, exist_ok=True)
@@ -711,27 +533,6 @@ class NamdEngine(BaseEngine):
         cmd1: Optional[Command] = None
         if two_box and namd_box1_dir is not None:
             cores1 = int(self.cfg.total_no_cores) if mode == "series" else int(self.cfg.no_core_box_1)
-            # cmd1 = Command(
-            #     argv=[str(self.exec_path), f"+p{cores1}", "in.conf"],
-            #     cwd=Path(namd_box1_dir),
-            #     stdout_path=Path(namd_box1_dir) / "out.dat",
-            # )
-            
-            # cmd1 = Command(
-            #     argv=[str(self.exec_path), f"+p{cores1}", "in.conf"],
-            #     cwd=Path(namd_box1_dir),
-            #     stdout_path=persisted_output_path("NAMD", namd_box1_dir, "out.dat"),
-            # )
-
-            # cmd1 = Command(
-            #     argv=[str(self.exec_path), f"+p{cores1}", "in.conf"],
-            #     cwd=Path(namd_box1_dir),
-            #     **self._stdout_command_kwargs(
-            #         run_dir=Path(namd_box1_dir),
-            #         fifo_resources=fifo_resources,
-            #         fifo_basename="box1.out.dat",
-            #     ),
-            # )
 
             disk_box1_dir = self._disk_namd_dir(fifo_resources, 1, run_no)
             disk_box1_dir.mkdir(parents=True, exist_ok=True)
@@ -745,18 +546,7 @@ class NamdEngine(BaseEngine):
                 ),
             )
 
-        # rc0 = rc1 = None
-        # if cmd1 is None or mode == "series":
-        #     h0 = self.runner.start(cmd0)
-        #     rc0 = self.runner.wait(h0)
-        #     if cmd1 is not None:
-        #         h1 = self.runner.start(cmd1)
-        #         rc1 = self.runner.wait(h1)
-        # else:
-        #     h0 = self.runner.start(cmd0)
-        #     h1 = self.runner.start(cmd1)
-        #     rc0 = self.runner.wait(h0)
-        #     rc1 = self.runner.wait(h1)
+        
         rc0 = rc1 = None
         box0_time = 0.0
         box1_time = 0.0
@@ -863,19 +653,7 @@ class NamdEngine(BaseEngine):
                     )
 
         # 6) Update PME dims after Run-0 (out.dat exists now)
-        # if run_no == 0:
-        #     # nx0, ny0, nz0, _ = self.get_run0_pme_dims(0)
-        #     nx0, ny0, nz0, _ = self.get_run0_pme_dims(0, run_root=runtime_namd_root)
-        #     if (nx0 is not None) and (ny0 is not None) and (nz0 is not None):
-        #         state.pme_box0.x, state.pme_box0.y, state.pme_box0.z = int(nx0), int(ny0), int(nz0)
-        #     if two_box:
-        #         # nx1, ny1, nz1, _ = self.get_run0_pme_dims(1)
-        #         nx1, ny1, nz1, _ = self.get_run0_pme_dims(1, run_root=runtime_namd_root)
-
-        #         if (nx1 is not None) and (ny1 is not None) and (nz1 is not None):
-        #             state.pme_box1.x, state.pme_box1.y, state.pme_box1.z = int(nx1), int(ny1), int(nz1)
         if run_no == 0:
-            # nx0, ny0, nz0, _ = self.get_run0_pme_dims(0)
             nx0, ny0, nz0, _ = self.get_run0_pme_dims(0, run_root=runtime_namd_root)
             if (nx0 is not None) and (ny0 is not None) and (nz0 is not None):
                 state.pme_box0.x, state.pme_box0.y, state.pme_box0.z = int(nx0), int(ny0), int(nz0)
@@ -887,7 +665,6 @@ class NamdEngine(BaseEngine):
             )
 
             if two_box:
-                # nx1, ny1, nz1, _ = self.get_run0_pme_dims(1)
                 nx1, ny1, nz1, _ = self.get_run0_pme_dims(1, run_root=runtime_namd_root)
 
                 if (nx1 is not None) and (ny1 is not None) and (nz1 is not None):
@@ -941,25 +718,6 @@ class NamdEngine(BaseEngine):
                 state.pme_box1.x, state.pme_box1.y, state.pme_box1.z = 48, 48, 48
 
     #FIFO helpers
-    # def _stdout_command_kwargs(
-    #     self,
-    #     *,
-    #     run_dir: Path,
-    #     fifo_resources=None,
-    #     fifo_basename: str,
-    # ) -> dict:
-    #     persisted_disk_path = persisted_output_path("NAMD", run_dir, "out.dat")
-
-    #     if fifo_resources is None:
-    #         return {
-    #             "stdout_path": persisted_disk_path,
-    #         }
-
-    #     return {
-    #         "stdout_path": None,
-    #         "stdout_fifo_path": fifo_resources.endpoints[fifo_basename].fifo_path,
-    #         "stdout_disk_path": persisted_disk_path,
-    #     }
     
     def _runtime_namd_root(self, fifo_resources) -> Path:
         if fifo_resources is None:
@@ -973,11 +731,7 @@ class NamdEngine(BaseEngine):
             return Path(self.cfg.path_namd_runs) / f"{step_id}_{suffix}"
         return fifo_resources.disk_dir(box_number)
 
-    # def _stdout_command_kwargs(self, *, runtime_dir: Path, disk_dir: Path) -> dict:
-    #     return {
-    #         "stdout_path": runtime_dir / "out.dat",
-    #         "stdout_disk_path": disk_dir / "out.dat",
-    #     }
+
     def _stdout_command_kwargs(
         self,
         *,

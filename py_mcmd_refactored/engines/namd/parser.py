@@ -1,3 +1,8 @@
+# py-MCMD
+# Author: Haydar Mehryar 
+# Copyright (c) 2025
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 from typing import Optional, Tuple
 from utils.path import format_cycle_id
@@ -42,10 +47,8 @@ def find_run0_fft_filename(run0_dir: Path) -> Optional[str]:
                 return name.name
     except FileNotFoundError:
         raise FileNotFoundError(f"Directory {run0_dir} does not exist.")
-        # return None
     except Exception:
         raise
-        # return None
     return None
 
 def get_run0_dir(path_namd_runs: Path | str, box_number: int, id_width: int = 8) -> Path:
