@@ -33,75 +33,9 @@ import time
 logger = logging.getLogger(__name__)
 
 
-# logger = logging.getLogger(__name__)
+
 class GomcEngine(BaseEngine):
-    # def __init__(self, cfg, engine_type: str="GOMC", dry_run: bool = False):
-    #     super().__init__(cfg, engine_type)
 
-    #     self.dry_run = dry_run
-    #     # gomc_bin_directory is optional during tests / dry-run
-    #     self.bin_dir = self._resolve_gomc_bin_dir(cfg)
-    #     # self.bin_dir = Path(cfg.gomc_bin_directory)
-    #     self.path_template = Path(cfg.path_gomc_template) if getattr(cfg, "path_gomc_template", None) else None
-
-    #     # self.path_template: Path = Path(cfg.path_gomc_template) if cfg.path_gomc_template else None
-    #     self.use_gpu: bool = str(cfg.gomc_use_CPU_or_GPU).upper() == "GPU"
-    #     self.ensemble: str = str(cfg.simulation_type).upper()
-    #     self.exec_name: str = f"GOMC_{'GPU' if self.use_gpu else 'CPU'}_{self.ensemble}"
-
-    #     self.exec_path = (self.bin_dir / self.exec_name).resolve()
-
-    #     # In dry-run, don't touch the filesystem; tests may not provide real binaries.
-    #     if not self.dry_run:
-    #         if self.bin_dir is None or not self.bin_dir.exists():
-    #             raise FileNotFoundError(
-    #                 f"[GOMC] Binary directory not found: {self.bin_dir!r}"
-    #             )
-    #         if self.exec_path is None or not self.exec_path.exists():
-    #             raise FileNotFoundError(
-    #                 f"[GOMC] Executable not found: {self.exec_name} under {self.bin_dir}"
-    #             )
-    #         # self.exec_path = self.bin_dir / exe
-    #         # self.exec_path = "{}/{}/GOMC_{}_{}".format(
-    #         #     str(os.getcwd()),
-    #         #     self.bin_dir,
-    #         #     self.exec_name
-    #         # )
-    #     else:
-    #          logger.warning("GOMC binary dir %s not found; continuing in dry_run.", self.bin_dir)
-    #     # self.run_steps = int(getattr(cfg, "gomc_run_steps", 0))   
-    #     self.runner = SubprocessRunner(dry_run=self.dry_run)
-    #     self.steps_per_run = int(getattr(cfg, "gomc_run_steps", 0)) 
-
-    #     # ... use gomc_template when generating the per-cycle GOMC input ...
-    # def run(self):
-    #     # Implement the logic to run GOMC simulation using the template
-    #     pass
-
-    # def __init__(self, cfg, engine_type="GOMC", dry_run: bool = False):
-    #     super().__init__(cfg, engine_type, dry_run=dry_run)
-    #     self.dry_run = dry_run
-
-    #     self.bin_dir = Path(cfg.gomc_bin_directory)
-    #     self.path_template = Path(cfg.path_gomc_template) if cfg.path_gomc_template else None
-
-    #     exe_name = "GOMC_GPU" if cfg.gomc_use_CPU_or_GPU == "GPU" else "GOMC_CPU"
-        
-    #     if self.bin_dir.exists():
-    #         self.exec_path = str((self.bin_dir / exe_name).resolve())
-    #         self.exec_name = exe_name
-    #     else:
-    #         if self.dry_run:
-    #             logger.warning("GOMC bin dir %s not found; continuing in dry_run.", self.bin_dir)
-    #             self.exec_path = exe_name
-    #             self.exec_name = exe_name
-    #         else:
-    #             raise FileNotFoundError(f"GOMC binary directory {self.bin_dir} does not exist.")
-
-    #     # IMPORTANT: do NOT use `self.run_steps` as an int (it must remain callable)
-    #     self.steps_per_run = int(getattr(cfg, "gomc_run_steps", 0))
-
-    #     self.runner = SubprocessRunner(dry_run=self.dry_run)
 
     def __init__(self, cfg, engine_type="GOMC", dry_run: bool = False):
         super().__init__(cfg, engine_type, dry_run=dry_run)
@@ -162,18 +96,7 @@ class GomcEngine(BaseEngine):
         repo_root = py_root.parent                        # repo root containing py_mcmd_refactored/
         return (repo_root / "GOMC" / "bin").resolve()
     
-    # def run_steps(self, *, run_dir: Path, cores: int) -> int:
-    #     # cmd = Command(
-    #     #     argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
-    #     #     cwd=Path(run_dir),
-    #     #     stdout_path=Path(run_dir) / "out.dat",
-    #     # )
-    #     cmd = Command(
-    #         argv=[str(self.exec_path), f"+p{int(cores)}", "in.conf"],
-    #         cwd=Path(run_dir),
-    #         stdout_path=persisted_output_path("GOMC", run_dir, "out.dat"),
-    #     )
-    #     return self.runner.run_and_wait(cmd)
+    
 
     def run_steps(self, *, run_dir: Path, cores: int, fifo_resources=None) -> int:
         cmd = Command(
@@ -246,45 +169,12 @@ class GomcEngine(BaseEngine):
         )
 
         
-        # gomc_newdir = write_gomc_conf_file(
-        #     python_file_directory,
-        #     self.cfg.path_gomc_runs,
-        #     run_no,
-        #     self.cfg.gomc_run_steps,
-        #     self.cfg.gomc_rst_coor_ckpoint_steps,
-        #     self.cfg.gomc_console_blkavg_hist_steps,
-        #     self.cfg.gomc_hist_sample_steps,
-        #     self.cfg.simulation_temp_k,
-        #     self.cfg.simulation_pressure_bar,
-        #     self.cfg.starting_pdb_box_0_file,
-        #     self.cfg.starting_pdb_box_1_file,
-        #     self.cfg.starting_psf_box_0_file,
-        #     self.cfg.starting_psf_box_1_file,
-        # )
+ 
 
         state.gomc_dir = Path(gomc_newdir)
 
         # 2) Execute GOMC (stdout -> out.dat)
-        # cmd = Command(
-        #     argv=[str(self.exec_path), f"+p{int(self.cfg.total_no_cores)}", "in.conf"],
-        #     cwd=Path(gomc_newdir),
-        #     stdout_path=Path(gomc_newdir) / "out.dat",
-        # )
         
-        # cmd = Command(
-        #     argv=[str(self.exec_path), f"+p{int(self.cfg.total_no_cores)}", "in.conf"],
-        #     cwd=Path(gomc_newdir),
-        #     stdout_path=persisted_output_path("GOMC", gomc_newdir, "out.dat"),
-        # )
-
-        # cmd = Command(
-        #     argv=[str(self.exec_path), f"+p{int(self.cfg.total_no_cores)}", "in.conf"],
-        #     cwd=Path(gomc_newdir),
-        #     **self._stdout_command_kwargs(
-        #         run_dir=Path(gomc_newdir),
-        #         fifo_resources=fifo_resources,
-        #     ),
-        # )
 
         disk_gomc_dir = self._disk_gomc_dir(fifo_resources, run_no)
         disk_gomc_dir.mkdir(parents=True, exist_ok=True)
@@ -298,8 +188,7 @@ class GomcEngine(BaseEngine):
             ),
         )
 
-        # h = self.runner.start(cmd)
-        # rc = self.runner.wait(h)
+
         t0 = time.perf_counter()
         h = self.runner.start(cmd)
         rc = self.runner.wait(h)
@@ -460,24 +349,7 @@ class GomcEngine(BaseEngine):
                 psf_path.write_text("PSF\n", encoding="utf-8")
 
     #FIFO helper
-    # def _stdout_command_kwargs(
-    #     self,
-    #     *,
-    #     run_dir: Path,
-    #     fifo_resources=None,
-    # ) -> dict:
-    #     persisted_disk_path = persisted_output_path("GOMC", run_dir, "out.dat")
 
-    #     if fifo_resources is None:
-    #         return {
-    #             "stdout_path": persisted_disk_path,
-    #         }
-
-    #     return {
-    #         "stdout_path": None,
-    #         "stdout_fifo_path": fifo_resources.endpoints["out.dat"].fifo_path,
-    #         "stdout_disk_path": persisted_disk_path,
-    #     }
 
     def _runtime_gomc_root(self, fifo_resources) -> Path:
         if fifo_resources is None:
@@ -490,11 +362,7 @@ class GomcEngine(BaseEngine):
             return Path(self.cfg.path_gomc_runs) / step_id
         return fifo_resources.disk_dir()
 
-    # def _stdout_command_kwargs(self, *, runtime_dir: Path, disk_dir: Path) -> dict:
-    #     return {
-    #         "stdout_path": runtime_dir / "out.dat",
-    #         "stdout_disk_path": disk_dir / "out.dat",
-    #     }
+    
     def _stdout_command_kwargs(
         self,
         *,

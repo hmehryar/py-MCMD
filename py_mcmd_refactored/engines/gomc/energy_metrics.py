@@ -1,4 +1,4 @@
-# py_mcmd_refactored/engines/gomc/energy_metrics.py
+
 from __future__ import annotations
 
 from typing import Iterable, List, Tuple

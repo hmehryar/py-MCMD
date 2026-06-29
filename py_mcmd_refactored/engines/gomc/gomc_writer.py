@@ -1,4 +1,3 @@
-# py_mcmd_refactored/engines/gomc/gomc_writer.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -57,18 +56,6 @@ def _rel(p: Path, base: Path) -> str:
     """Return POSIX relative path from base to p (works across siblings)."""
     return os.path.relpath(str(p), start=str(base)).replace("\\", "/")
 
-
-# def _build_parameters_block(params_files: Iterable[Path], relative_to: Path) -> str:
-#     lines = []
-#     for p in params_files:
-#         p = Path(p)
-#         if p.is_absolute():
-#             rel = _rel(p, relative_to)
-#         else:
-#             # keep author-provided relative path as-is
-#             rel = p.as_posix()
-#         lines.append(f"Parameters \t {rel}\n")
-#     return "".join(lines)
 
 def _build_parameters_block(
     params_files: Iterable[Path],
@@ -300,29 +287,11 @@ def write_gomc_conf_file(
         else:
             log.warning("Warning: There is in error in the chemical potential settings for GCMC simulation.")
 
-    # if io.previous_gomc_dir is not None:
-    #     # Tests expect checkpoint path relative to project root (python_file_directory),
-    #     # e.g., 'GOMC/0000000003/Output_data_restart.chk'
-    #     prev_gomc_rel_chk = _rel(io.previous_gomc_dir, io.python_file_directory)
-    #     out = out.replace(
-    #         "Restart_Checkpoint_file",
-    #         f"true {prev_gomc_rel_chk}/Output_data_restart.chk",
-    #     )
-    # else:
-    #     if "Restart_Checkpoint_file" in out:
-    #         out = out.replace("Restart_Checkpoint_file", f"false {'Output_data_restart.chk'}")
 
     if io.previous_gomc_dir is not None:
         prev_chk = io.previous_gomc_dir / "Output_data_restart.chk"
         
-        # if not prev_chk.exists():
-        #     raise FileNotFoundError(f"Missing GOMC restart checkpoint: {prev_chk}")
-
-        # prev_chk_rel = _rel(prev_chk, gomc_newdir)
-        # out = out.replace(
-        #     "Restart_Checkpoint_file",
-        #     f"true {prev_chk_rel}",
-        # )
+        
         if prev_chk.exists():
             prev_chk_rel = _rel(prev_chk, gomc_newdir)
             out = out.replace(
