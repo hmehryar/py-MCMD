@@ -1,4 +1,3 @@
-# py_mcmd/cli/main.py
 
 import argparse
 import json
@@ -17,11 +16,6 @@ for p in (str(REPO_ROOT), str(PROJECT_ROOT)):
     if p not in sys.path:
         sys.path.insert(0, p)
         
-# PROJECT_ROOT = Path(__file__).resolve().parents[1]   # .../py_mcmd_refactored
-# if str(PROJECT_ROOT) not in sys.path:
-#     sys.path.insert(0, str(PROJECT_ROOT))
-
-# sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 
 from py_mcmd_refactored.version import get_version
 from config.models import load_simulation_config

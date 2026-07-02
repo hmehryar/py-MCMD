@@ -1,9 +1,3 @@
-# import os
-# import logging
-# from pathlib import Path
-# from engines.base import Engine as BaseEngine
-# from py_mcmd_refactored.tests.test_namd_energy_compare import cfg
-# from utils.subprocess_runner import Command, SubprocessRunner
 
 import os
 import logging
@@ -115,7 +109,7 @@ class GomcEngine(BaseEngine):
         return self.cfg.simulation_type in ("GEMC", "GCMC")
 
 
-    # def run_segment(self, *, run_no: int, state: RunState) -> dict:
+    
     def run_segment(self, *, run_no: int, state: RunState, fifo_resources=None) -> dict:
         """Run the full GOMC segment for an odd run_no and update RunState."""
 
@@ -134,7 +128,6 @@ class GomcEngine(BaseEngine):
 
         io = GOMCIOPaths(
             python_file_directory=python_file_directory,
-            # path_gomc_runs=Path(self.cfg.path_gomc_runs),
             path_gomc_runs=runtime_gomc_root,
             path_gomc_template=Path(self.cfg.path_gomc_template),
             namd_box_0_dir=Path(state.namd_box0_dir),

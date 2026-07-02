@@ -19,8 +19,6 @@ def test_validate_box_number_bad(bad):
     with pytest.raises(ValueError):
         _validate_box_number(bad)
 
-
-# tests for revised Step 2
 from pathlib import Path
 from engines.namd.namd_writer import _compute_namd_box_dir
 
@@ -203,7 +201,6 @@ def test_override_dim_raises_when_missing_all():
     with pytest.raises(ValueError):
         _override_dim(None, "x", 0, None, None)
 
-# tests (append to py_mcmd_refactored/tests/test_namd_writer.py)
 import pytest
 from engines.namd.namd_writer import _validate_angles
 
@@ -221,7 +218,6 @@ def test_validate_angles_run0_nonorthogonal_from_set_raises():
 def test_validate_angles_restart_run_allows_any_angles():
     _validate_angles(1, 95.0, 80.0, 120.0, 70.0, 110.0, 60.0)  # should not raise
 
-# tests (append to py_mcmd_refactored/tests/test_namd_writer.py)
 from engines.namd.namd_writer import _compute_pme_grid_dims
 
 def test_compute_pme_grid_dims_restart_returns_given():

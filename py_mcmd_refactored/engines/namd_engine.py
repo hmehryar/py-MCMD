@@ -20,7 +20,6 @@ from utils.persisted_file_lists import persisted_output_path
 import time
 
 logger = logging.getLogger(__name__)
-# from __future__ import annotations
 
 
 from engines.namd.plan import NamdExecutionPlan, build_namd_execution_plan
@@ -381,8 +380,6 @@ class NamdEngine(BaseEngine):
     def _two_box_enabled(self) -> bool:
         return (self.cfg.simulation_type == "GEMC") and (self.cfg.only_use_box_0_for_namd_for_gemc is False)
 
-
-    # def run_segment(self, *, run_no: int, state: RunState) -> dict:
     def run_segment(self, *, run_no: int, state: RunState, fifo_resources=None) -> dict:
         """Run the full NAMD segment for an even run_no and update RunState."""
         
