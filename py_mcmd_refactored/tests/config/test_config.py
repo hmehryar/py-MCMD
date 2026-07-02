@@ -12,7 +12,7 @@ from config.models import load_simulation_config, SimulationConfig
 def repo_root() -> Path:
     # test file is at: <repo>/py_mcmd_refactored/tests/test_config.py
     # parents[0]=.../tests, [1]=.../py_mcmd_refactored, [2]=<repo>
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 def make_cfg(**overrides) -> SimulationConfig:
     base = dict(
