@@ -1,4 +1,3 @@
-# py_mcmd_refactored/tests/test_energy_compare.py
 # py-MCMD
 # Author: Haydar Mehryar 
 # Copyright (c) 2025

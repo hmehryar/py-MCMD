@@ -36,7 +36,6 @@ def test_compute_namd_box_dir_width3():
     d = _compute_namd_box_dir(base, "NAMD", 7, 0, width=3)
     assert d.as_posix().endswith("/NAMD/007_a")
 
-# tests for Step 3 (append to py_mcmd_refactored/tests/test_namd_writer.py)
 from pathlib import Path
 import pytest
 from py_mcmd_refactored.engines.namd.namd_writer import _resolve_under, _load_template_text
@@ -75,7 +74,7 @@ def test_load_template_text_empty_raises(tmp_path):
     with pytest.raises(ValueError):
         _load_template_text(tmp_path, tpl)
 
-# tests for Step 4 (append to py_mcmd_refactored/tests/test_namd_writer.py)
+
 from pathlib import Path
 from engines.namd.namd_writer import _build_parameter_files_block
 
@@ -104,7 +103,7 @@ def test_build_parameter_files_block_empty_list(tmp_path):
     assert _build_parameter_files_block([], rel_to) == ""
     assert _build_parameter_files_block(None, rel_to) == ""
 
-# tests for Step 5 (append to py_mcmd_refactored/tests/test_namd_writer.py)
+
 from pathlib import Path
 from engines.namd.namd_writer import _compute_run_paths_and_read_pdb_lines
 
@@ -160,7 +159,7 @@ def test_compute_run_paths_and_read_pdb_lines_restart(tmp_path):
     assert repl["vel_file"].endswith("Output_data_BOX_1_restart.vel")
     assert any("CRYST1" in L for L in lines)
 
-# tests for Step 6 (append to py_mcmd_refactored/tests/test_namd_writer.py)
+
 from engines.namd.namd_writer import _parse_cryst1
 
 def test_parse_cryst1_parses_fixed_width():
@@ -181,7 +180,7 @@ def test_parse_cryst1_returns_none_when_missing():
     a,b,c,alpha,beta,gamma = _parse_cryst1(["ATOM  ...\n", "HEADER X\n"])
     assert all(v is None for v in (a,b,c,alpha,beta,gamma))
 
-# tests (append to py_mcmd_refactored/tests/test_namd_writer.py)
+
 from engines.namd.namd_writer import _override_dim
 import pytest
 
@@ -261,7 +260,6 @@ def test_compute_pme_grid_dims_run0_scales_npt_and_gemc():
             int(30.0 * 1.3 + 1),
         )
 
-# tests for Step 10 (append to py_mcmd_refactored/tests/test_namd_writer.py)
 from engines.namd.namd_writer import _apply_replacements
 import pytest
 
@@ -291,7 +289,6 @@ def test_apply_replacements_non_strict_allows_leftover():
     assert out == "A 32 B Y_PME_GRID_DIM"
 
 
-# tests for Step 11 (append to py_mcmd_refactored/tests/test_namd_writer.py)
 from pathlib import Path
 from engines.namd.namd_writer import write_namd_conf_file
 import pytest
@@ -305,7 +302,6 @@ def test_write_namd_conf_file_fresh(tmp_path, monkeypatch):
     prm.parent.mkdir()
     prm.write_text("* test prm")
     monkeypatch.setattr(mod, "starting_ff_file_list_namd", [prm])
-    # monkeypatch.setattr(mod, "starting_ff_file_list_namd", [prm], raising=False)
 
 
     # checker

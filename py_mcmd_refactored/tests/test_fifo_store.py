@@ -169,66 +169,7 @@ def test_managed_artifact_store_cleanup_all_removes_engine_cache(tmp_path: Path)
 
     assert not cache_file.exists()
 
-# # Default mode does not mirror runtime artifacts to disk
-# def test_managed_artifact_store_default_mode_keeps_runtime_in_managed_only(tmp_path: Path):
-#     store = ManagedArtifactStore(
-#         disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
-#         managed_root=tmp_path / "managed",
-#         developer_mode=False,
-#     )
 
-#     step = store.prepare_step("NAMD", "0000000000")
-#     box0_runtime = step.runtime_dir(0)
-#     box0_disk = step.disk_dir(0)
-
-#     (box0_runtime / "out.dat").write_text("stdout\n")
-#     (box0_runtime / "namdOut.restart.coor").write_text("coor\n")
-
-#     store.finalize_step_success("NAMD", "0000000000")
-
-#     assert (box0_runtime / "out.dat").exists()
-#     assert (box0_runtime / "namdOut.restart.coor").exists()
-#     assert not (box0_disk / "out.dat").exists()
-#     assert not (box0_disk / "namdOut.restart.coor").exists()
-
-# # Developer mode mirrors NAMD managed outputs to disk
-# def test_managed_artifact_store_developer_mode_mirrors_namd_outputs_to_disk(tmp_path: Path):
-#     store = ManagedArtifactStore(
-#         disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
-#         managed_root=tmp_path / "managed",
-#         developer_mode=True,
-#     )
-
-#     step = store.prepare_step("NAMD", "0000000000")
-#     (step.runtime_dir(0) / "out.dat").write_text("stdout\n")
-#     (step.runtime_dir(0) / "namdOut.restart.coor").write_text("coor\n")
-#     (step.runtime_dir(1) / "out.dat").write_text("stdout1\n")
-
-#     store.finalize_step_success("NAMD", "0000000000")
-
-#     assert (step.disk_dir(0) / "out.dat").read_text() == "stdout\n"
-#     assert (step.disk_dir(0) / "namdOut.restart.coor").read_text() == "coor\n"
-#     assert (step.disk_dir(1) / "out.dat").read_text() == "stdout1\n"
-
-# # Failure cleanup removes managed runtime dirs and does not leave stale disk copies in default mode
-# def test_managed_artifact_store_failure_cleans_runtime_dirs(tmp_path: Path):
-#     store = ManagedArtifactStore(
-#         disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
-#         managed_root=tmp_path / "managed",
-#         developer_mode=False,
-#     )
-
-#     step = store.prepare_step("GOMC", "0000000001")
-#     runtime_dir = step.runtime_dir()
-#     disk_dir = step.disk_dir()
-
-#     (runtime_dir / "out.dat").write_text("stdout\n")
-#     (runtime_dir / "Output_data_BOX_0_restart.coor").write_text("coor\n")
-
-#     store.finalize_step_failure("GOMC", "0000000001")
-
-#     assert not runtime_dir.exists()
-#     assert not disk_dir.exists()
 
 def test_managed_artifact_store_prepare_step_creates_expected_runtime_dirs(tmp_path: Path):
     store = ManagedArtifactStore(

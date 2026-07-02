@@ -72,8 +72,7 @@ def test_integration_dry_run_two_cycles(tmp_path: Path, monkeypatch):
     # (even run_no start tick, odd run_no end tick)
     # cycle0 start=0 end=20; cycle1 start=100 end=130
     # ---------------------------
-    # ticks = iter([0.0, 20.0, 100.0, 130.0])
-    # monkeypatch.setattr(mgr.time, "perf_counter", lambda: next(ticks))
+
     import itertools
 
     tick_values = [0.0, 20.0, 100.0, 130.0]
@@ -110,21 +109,9 @@ def test_integration_dry_run_two_cycles(tmp_path: Path, monkeypatch):
     # ---------------------------
     import engines.gomc_engine as ge
 
-    # def fake_write_gomc_conf_file(
-    #     python_file_directory,
-    #     path_gomc_runs,
-    #     run_no,
-    #     *args,
-    #     **kwargs,
-    # ):
-    #     root = Path(path_gomc_runs)
-    #     root.mkdir(parents=True, exist_ok=True)
-    #     run_dir = root / f"run_{int(run_no):02d}"
-    #     run_dir.mkdir(parents=True, exist_ok=True)
-    #     (run_dir / "in.conf").write_text("# dummy gomc\n", encoding="utf-8")
-    #     return str(run_dir)
+    
 
-    # monkeypatch.setattr(ge, "write_gomc_conf_file", fake_write_gomc_conf_file)
+
     import engines.gomc_engine as ge
     from pathlib import Path
 
@@ -152,7 +139,6 @@ def test_integration_dry_run_two_cycles(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(ne, "get_namd_energy_data", fake_get_namd_energy_data)
 
-    # monkeypatch.setattr(ge, "get_gomc_energy_data", lambda lines, box: object())
     monkeypatch.setattr(
         ge,
         "get_gomc_energy_data",
@@ -192,18 +178,6 @@ def test_integration_dry_run_two_cycles(tmp_path: Path, monkeypatch):
     RealNamd = ne.NamdEngine
     RealGomc = ge.GomcEngine
 
-    # class TrackedNamd(RealNamd):
-    #     def run_segment(self, *, run_no: int, state):
-    #         call_order.append(("NAMD", int(run_no)))
-    #         # Provide deterministic timing for TIME_STATS
-    #         state.timings.max_namd_cycle_time_s = 10.0
-    #         return super().run_segment(run_no=run_no, state=state)
-
-    # class TrackedGomc(RealGomc):
-    #     def run_segment(self, *, run_no: int, state):
-    #         call_order.append(("GOMC", int(run_no)))
-    #         state.timings.gomc_cycle_time_s = 5.0
-    #         return super().run_segment(run_no=run_no, state=state)
 
     class TrackedNamd(RealNamd):
         def run_segment(self, *, run_no: int, state, fifo_resources=None):

@@ -1,5 +1,3 @@
-# py_mcmd_refactored/tests/test_gomc_run_segment.py
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -124,7 +122,6 @@ def test_gomc_run_segment_calls_compare_when_values_exist(tmp_path: Path, monkey
     monkeypatch.setattr(ge, "compare_namd_gomc_energies", fake_compare)
 
     # patch parse so GOMC initials exist
-    # monkeypatch.setattr(ge, "get_gomc_energy_data", lambda lines, box: object())
     monkeypatch.setattr(
         ge,
         "get_gomc_energy_data",
@@ -150,17 +147,12 @@ def test_gomc_run_segment_two_box_gemc_parses_box1(tmp_path: Path, monkeypatch, 
     import engines.gomc_engine as ge
 
     # return "df" as the box number
-    # monkeypatch.setattr(ge, "get_gomc_energy_data", lambda lines, box: box)
     monkeypatch.setattr(
         ge,
         "get_gomc_energy_data",
         lambda cfg, lines, box_number: box_number,
         )
-    # monkeypatch.setattr(
-    #     ge,
-    #     "get_gomc_energy_data",
-    #     lambda *args, **kwargs: kwargs["box_number"]
-    #     )
+
     
 
     def fake_metrics(df):

@@ -16,11 +16,6 @@ from pathlib import Path
 
 
 def _ensure_project_on_syspath() -> None:
-    # tests_dir = Path(__file__).resolve().parent
-    # project_root = tests_dir.parent  # <repo>/py_mcmd_refactored
-    # project_root_str = str(project_root)
-    # if project_root_str not in sys.path:
-    #     sys.path.insert(0, project_root_str)
     tests_dir = Path(__file__).resolve().parent
     project_root = tests_dir.parent          # <repo>/py_mcmd_refactored
     repo_root = project_root.parent          # <repo>

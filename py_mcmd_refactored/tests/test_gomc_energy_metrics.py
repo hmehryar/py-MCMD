@@ -1,4 +1,4 @@
-# py_mcmd_refactored/tests/test_gomc_energy_metrics.py
+
 from __future__ import annotations
 
 import pandas as pd

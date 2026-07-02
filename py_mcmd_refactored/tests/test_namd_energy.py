@@ -1,5 +1,4 @@
 
-# py_mcmd_refactored/tests/test_namd_energy.py
 import sys
 sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 from engines.namd.energy import NamdEnergyData

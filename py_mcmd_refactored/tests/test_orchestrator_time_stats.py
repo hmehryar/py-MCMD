@@ -1,6 +1,3 @@
-# py_mcmd_refactored/tests/test_orchestrator_time_stats.py
-# (UPDATED: DummyNamd / DummyGomc now define exec_path to satisfy orchestrator init/logging)
-
 from __future__ import annotations
 
 from pathlib import Path

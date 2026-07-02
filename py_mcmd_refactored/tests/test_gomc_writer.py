@@ -1,11 +1,8 @@
 # py_mcmd_refactored/tests/test_gomc_writer.py
 from __future__ import annotations
 
-# --- at top of file ---
 import os
-# (keep other imports)
 
-# --- replace the _rel helper with this robust version ---
 def _rel(p: Path, base: Path) -> str:
     """Return a relative POSIX path from base to p (can traverse up with ..)."""
     return os.path.relpath(str(p), start=str(base)).replace("\\", "/")
