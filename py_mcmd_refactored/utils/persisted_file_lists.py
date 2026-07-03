@@ -6,8 +6,10 @@ from typing import Final
 
 # Default-mode disk persistence allow-lists
 # Everything else is FIFO-only unless developer_mode enables dual-write.
-NAMD_PERSISTED_BASENAMES: Final[list[str]] = ["out.dat"]
-GOMC_PERSISTED_BASENAMES: Final[list[str]] = ["out.dat"]
+# NAMD_PERSISTED_BASENAMES: Final[list[str]] = ["out.dat"]
+# GOMC_PERSISTED_BASENAMES: Final[list[str]] = ["out.dat"]
+NAMD_PERSISTED_BASENAMES: Final[list[str]] = []
+GOMC_PERSISTED_BASENAMES: Final[list[str]] = []
 
 _ENGINE_ALLOW_LISTS: Final[dict[str, frozenset[str]]] = {
     "NAMD": frozenset(NAMD_PERSISTED_BASENAMES),
