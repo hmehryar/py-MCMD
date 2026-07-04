@@ -7,7 +7,11 @@ import pytest
 
 sys.path.insert(0, "/home/arsalan/wsu-gomc/py-MCMD-hm/py_mcmd_refactored")
 
-from utils.fifo_store import FifoStore, ManagedArtifactStore
+from utils.fifo_store import (
+    FifoStore, 
+    ManagedArtifactStore,
+    _discover_managed_root,
+    )
 
 
 pytestmark = pytest.mark.skipif(
@@ -250,7 +254,30 @@ def test_managed_artifact_store_developer_mode_mirrors_gomc_outputs_to_disk(tmp_
     assert (step.disk_dir() / "Output_data_BOX_0_restart.coor").read_text(encoding="utf-8") == "gomc coor\n"
 
 
-def test_managed_artifact_store_failure_cleans_runtime_dirs_without_disk_mirror_in_default_mode(tmp_path: Path):
+# def test_managed_artifact_store_failure_cleans_runtime_dirs_without_disk_mirror_in_default_mode(tmp_path: Path):
+#     store = ManagedArtifactStore(
+#         disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
+#         managed_root=tmp_path / "managed",
+#         developer_mode=False,
+#     )
+
+#     step = store.prepare_step("GOMC", "0000000003")
+#     runtime_dir = step.runtime_dir()
+#     disk_dir = step.disk_dir()
+
+#     (runtime_dir / "out.dat").write_text("stdout\n", encoding="utf-8")
+#     (runtime_dir / "Output_data_BOX_0_restart.coor").write_text("coor\n", encoding="utf-8")
+
+#     store.finalize_step_failure("GOMC", "0000000003")
+
+#     assert not runtime_dir.exists()
+#     assert not disk_dir.exists()
+#     with pytest.raises(KeyError):
+#         store.get_step("GOMC", "0000000003")
+
+def test_managed_artifact_store_failure_preserves_runtime_dirs_for_debugging(
+    tmp_path: Path,
+):
     store = ManagedArtifactStore(
         disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
         managed_root=tmp_path / "managed",
@@ -262,11 +289,102 @@ def test_managed_artifact_store_failure_cleans_runtime_dirs_without_disk_mirror_
     disk_dir = step.disk_dir()
 
     (runtime_dir / "out.dat").write_text("stdout\n", encoding="utf-8")
-    (runtime_dir / "Output_data_BOX_0_restart.coor").write_text("coor\n", encoding="utf-8")
+    (runtime_dir / "Output_data_BOX_0_restart.coor").write_text(
+        "coor\n",
+        encoding="utf-8",
+    )
 
     store.finalize_step_failure("GOMC", "0000000003")
 
-    assert not runtime_dir.exists()
+    assert runtime_dir.exists()
+    assert (runtime_dir / "out.dat").exists()
+    assert (runtime_dir / "Output_data_BOX_0_restart.coor").exists()
     assert not disk_dir.exists()
+    assert store.get_step("GOMC", "0000000003").status == "failed"
+
+def test_discover_managed_root_prefers_explicit_root_over_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    explicit_root = tmp_path / "explicit"
+    monkeypatch.setenv(
+        "PY_MCMD_MANAGED_OUTPUT_ROOT",
+        str(tmp_path / "environment"),
+    )
+
+    assert _discover_managed_root(explicit_root) == explicit_root
+
+def test_discover_managed_root_uses_environment_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    environment_root = tmp_path / "environment"
+    monkeypatch.setenv(
+        "PY_MCMD_MANAGED_OUTPUT_ROOT",
+        str(environment_root),
+    )
+
+    assert _discover_managed_root() == environment_root
+
+def test_discover_managed_root_is_unique_per_working_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    simulation_a = tmp_path / "simulation_a"
+    simulation_b = tmp_path / "simulation_b"
+    simulation_a.mkdir()
+    simulation_b.mkdir()
+    monkeypatch.delenv("PY_MCMD_MANAGED_OUTPUT_ROOT", raising=False)
+
+    monkeypatch.chdir(simulation_a)
+    root_a = _discover_managed_root()
+
+    monkeypatch.chdir(simulation_b)
+    root_b = _discover_managed_root()
+
+    assert root_a != root_b
+
+    if root_a.parent == Path("/dev/shm"):
+        assert root_a.name.startswith("py_mcmd_")
+        assert root_b.name.startswith("py_mcmd_")
+
+def test_managed_artifact_store_release_step_removes_runtime_resources(
+    tmp_path: Path,
+):
+    store = ManagedArtifactStore(
+        disk_roots={"NAMD": tmp_path / "NAMD", "GOMC": tmp_path / "GOMC"},
+        managed_root=tmp_path / "managed",
+    )
+
+    step = store.prepare_step("NAMD", "0000000004")
+    runtime_box0 = step.runtime_dir(0)
+    runtime_box1 = step.runtime_dir(1)
+
+    (runtime_box0 / "out.dat").write_text(
+        "stdout\n",
+        encoding="utf-8",
+    )
+
+    store.release_step("NAMD", "0000000004")
+
+    assert not runtime_box0.exists()
+    assert not runtime_box1.exists()
+
     with pytest.raises(KeyError):
-        store.get_step("GOMC", "0000000003")
+        store.get_step("NAMD", "0000000004")
+
+def test_legacy_fifo_store_release_step_matches_cleanup_behavior(
+    tmp_path: Path,
+):
+    store = make_store(tmp_path)
+    resources = store.prepare_step("GOMC", 8)
+    fifo_path = resources.endpoints["out.dat"].fifo_path
+
+    assert fifo_path.exists()
+
+    store.release_step("GOMC", 8)
+
+    assert not fifo_path.exists()
+
+    with pytest.raises(KeyError):
+        store.get_step("GOMC", 8)

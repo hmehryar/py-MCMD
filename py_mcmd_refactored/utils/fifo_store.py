@@ -8,7 +8,23 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+import hashlib
 
+
+
+# def _discover_managed_root(explicit_root: Optional[str | Path] = None) -> Path:
+#     if explicit_root is not None:
+#         return Path(explicit_root)
+
+#     env_root = os.getenv("PY_MCMD_MANAGED_OUTPUT_ROOT")
+#     if env_root:
+#         return Path(env_root)
+
+#     shm_root = Path("/dev/shm")
+#     if shm_root.exists() and os.access(shm_root, os.W_OK):
+#         return shm_root / "py_mcmd_refactored"
+
+#     return Path.cwd() / ".managed_outputs"
 
 def _discover_managed_root(explicit_root: Optional[str | Path] = None) -> Path:
     if explicit_root is not None:
@@ -20,7 +36,12 @@ def _discover_managed_root(explicit_root: Optional[str | Path] = None) -> Path:
 
     shm_root = Path("/dev/shm")
     if shm_root.exists() and os.access(shm_root, os.W_OK):
-        return shm_root / "py_mcmd_refactored"
+        cwd = Path.cwd()
+        unique_id = f"{cwd.parent.name}_{cwd.name}"
+        path_hash = hashlib.md5(str(cwd).encode()).hexdigest()[:6]
+        # e.g. /dev/shm/py_mcmd_case_1_7ae391
+        unique_name = f"py_mcmd_{unique_id}_{path_hash}"
+        return shm_root / unique_name
 
     return Path.cwd() / ".managed_outputs"
 
@@ -91,6 +112,7 @@ class ManagedArtifactStore:
       - prepare_step(engine, step_id)
       - finalize_step_success(engine, step_id)
       - finalize_step_failure(engine, step_id)
+      - release_step(engine, step_id)
       - cleanup_step(engine, step_id)
       - cleanup_all()
     """
@@ -175,10 +197,19 @@ class ManagedArtifactStore:
     def finalize_step_failure(self, engine: str, step_id: str | int) -> None:
         resources = self.get_step(engine, step_id)
         resources.status = "failed"
-        self.logger.info(
+        self.logger.warning(
             "[ARTIFACT_STORE] finalized failure engine=%s step=%s; cleaning runtime dirs",
             resources.engine,
             resources.step_id,
+        )
+        # self.cleanup_step(engine, step_id)
+
+    def release_step(self, engine: str, step_id: str | int) -> None:
+        """Release runtime files after downstream consumers no longer need them."""
+        self.logger.debug(
+            "[ARTIFACT_STORE] releasing consumed step engine=%s step=%s",
+            engine,
+            step_id,
         )
         self.cleanup_step(engine, step_id)
 
@@ -363,6 +394,10 @@ class LegacyFifoStore:
 
     def finalize_step_failure(self, engine: str, step_id: str | int) -> None:
         self.get_step(engine, step_id).status = "failed"
+        self.cleanup_step(engine, step_id)
+    
+    def release_step(self, engine: str, step_id: str | int) -> None:
+        """Release legacy FIFO resources after consumers no longer need them."""
         self.cleanup_step(engine, step_id)
 
     def cleanup_step(self, engine: str, step_id: str | int) -> None:
