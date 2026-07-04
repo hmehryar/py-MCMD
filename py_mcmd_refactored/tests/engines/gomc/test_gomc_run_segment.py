@@ -201,3 +201,18 @@ def test_gomc_run_segment_calls_energy_parser_with_cfg(monkeypatch, tmp_path):
         "py_mcmd_refactored.engines.gomc_engine.get_gomc_energy_data",
         fake_parse,
     )
+
+
+def test_gomc_managed_stdout_routes_only_to_runtime_dir(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    eng = GomcEngine(cfg, dry_run=True)
+    runtime_dir = tmp_path / "managed" / "GOMC" / "0000000001"
+    disk_dir = tmp_path / "GOMC" / "0000000001"
+
+    kwargs = eng._stdout_command_kwargs(
+        runtime_dir=runtime_dir,
+        disk_dir=disk_dir,
+    )
+
+    assert kwargs == {"stdout_path": runtime_dir / "out.dat"}
+    assert "stdout_disk_path" not in kwargs

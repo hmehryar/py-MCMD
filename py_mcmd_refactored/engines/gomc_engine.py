@@ -356,6 +356,27 @@ class GomcEngine(BaseEngine):
         return fifo_resources.disk_dir()
 
     
+    # def _stdout_command_kwargs(
+    #     self,
+    #     *,
+    #     runtime_dir: Optional[Path] = None,
+    #     disk_dir: Optional[Path] = None,
+    #     run_dir: Optional[Path] = None,
+    #     fifo_resources=None,
+    # ) -> dict:
+    #     if runtime_dir is not None and disk_dir is not None:
+    #         return {
+    #             "stdout_path": runtime_dir / "out.dat",
+    #             "stdout_disk_path": disk_dir / "out.dat",
+    #         }
+
+    #     if run_dir is not None:
+    #         return {
+    #             "stdout_path": persisted_output_path("GOMC", run_dir, "out.dat"),
+    #         }
+
+    #     raise TypeError("Unsupported stdout routing arguments for GomcEngine")
+
     def _stdout_command_kwargs(
         self,
         *,
@@ -365,9 +386,11 @@ class GomcEngine(BaseEngine):
         fifo_resources=None,
     ) -> dict:
         if runtime_dir is not None and disk_dir is not None:
+            # Keep managed engine stdout in runtime storage only.
+            # Disk mirroring remains available to callers that explicitly
+            # request stdout_disk_path through SubprocessRunner.
             return {
                 "stdout_path": runtime_dir / "out.dat",
-                "stdout_disk_path": disk_dir / "out.dat",
             }
 
         if run_dir is not None:

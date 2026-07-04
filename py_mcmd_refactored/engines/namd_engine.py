@@ -729,6 +729,28 @@ class NamdEngine(BaseEngine):
         return fifo_resources.disk_dir(box_number)
 
 
+    # def _stdout_command_kwargs(
+    #     self,
+    #     *,
+    #     runtime_dir: Optional[Path] = None,
+    #     disk_dir: Optional[Path] = None,
+    #     run_dir: Optional[Path] = None,
+    #     fifo_resources=None,
+    #     fifo_basename: str = "box0.out.dat",
+    # ) -> dict:
+    #     if runtime_dir is not None and disk_dir is not None:
+    #         return {
+    #             "stdout_path": runtime_dir / "out.dat",
+    #             "stdout_disk_path": disk_dir / "out.dat",
+    #         }
+
+    #     if run_dir is not None:
+    #         return {
+    #             "stdout_path": persisted_output_path("NAMD", run_dir, "out.dat"),
+    #         }
+
+    #     raise TypeError("Unsupported stdout routing arguments for NamdEngine")
+
     def _stdout_command_kwargs(
         self,
         *,
@@ -739,9 +761,11 @@ class NamdEngine(BaseEngine):
         fifo_basename: str = "box0.out.dat",
     ) -> dict:
         if runtime_dir is not None and disk_dir is not None:
+            # Keep managed engine stdout in runtime storage only.
+            # Disk mirroring remains available to callers that explicitly
+            # request stdout_disk_path through SubprocessRunner.
             return {
                 "stdout_path": runtime_dir / "out.dat",
-                "stdout_disk_path": disk_dir / "out.dat",
             }
 
         if run_dir is not None:

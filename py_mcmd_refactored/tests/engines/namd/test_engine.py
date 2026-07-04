@@ -42,3 +42,18 @@ def test_get_run0_pme_dims(tmp_path: Path):
     assert (nx, ny, nz) == (48, 50, 52)
     assert run0_dir.endswith("NAMD/0000000000_a")
 
+
+def test_namd_managed_stdout_routes_only_to_runtime_dir(tmp_path: Path):
+    cfg = make_cfg(tmp_path)
+    eng = NamdEngine(cfg, dry_run=True)
+    runtime_dir = tmp_path / "managed" / "NAMD" / "0000000000_a"
+    disk_dir = tmp_path / "NAMD" / "0000000000_a"
+
+    kwargs = eng._stdout_command_kwargs(
+        runtime_dir=runtime_dir,
+        disk_dir=disk_dir,
+    )
+
+    assert kwargs == {"stdout_path": runtime_dir / "out.dat"}
+    assert "stdout_disk_path" not in kwargs
+
