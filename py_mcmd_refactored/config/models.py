@@ -50,6 +50,49 @@ class SimulationConfig(BaseModel):
         ),
     )
 
+    # Runtime cleanup and on-the-fly processing
+    disk_cleanup_mode: str = Field(
+        default="compact",
+        description=(
+            "Controls rolling disk-space cleanup. Options: 'compact' "
+            "(default), 'minimal', or 'off'."
+        ),
+    )
+
+    process_on_the_fly: StrictBool = Field(
+        default=False,
+        description=(
+            "Enable on-the-fly data processing after every completed "
+            "NAMD/GOMC cycle."
+        ),
+    )
+
+    combined_data_dir: str = Field(
+        default="combined_data",
+        description="Output directory for on-the-fly combined data files.",
+    )
+
+    rel_path_to_combine_binary_catdcd: str = Field(
+        default="required_data/bin/catdcd-4.0b/LINUXAMD64/bin/catdcd4.0/catdcd",
+        description="Path to the catdcd binary used to combine DCD trajectory files.",
+    )
+
+    combine_namd_dcd_file: StrictBool = Field(
+        default=True,
+        description="Whether to combine NAMD DCD trajectory files on-the-fly.",
+    )
+
+    combine_gomc_dcd_file: StrictBool = Field(
+        default=True,
+        description="Whether to combine GOMC DCD trajectory files on-the-fly.",
+    )
+
+    otf_keep_raw_cycles: int = Field(
+        default=2,
+        ge=1,
+        description="Number of recent raw cycle directories to keep for crash recovery.",
+    )
+
     # Core counts
     no_core_box_0: int = Field(..., ge=1) # must be a positive integer
     no_core_box_1: int = Field(..., ge=0) # can be zero unless ensemble needs box 1
@@ -115,14 +158,44 @@ class SimulationConfig(BaseModel):
             )
         return v
 
+    
+    @field_validator("disk_cleanup_mode", mode="before")
+    @classmethod
+    def _validate_disk_cleanup_mode(cls, v):
+        if not isinstance(v, str):
+            raise TypeError("disk_cleanup_mode must be a string.")
+
+        mode = v.strip().lower()
+        valid_modes = {"compact", "minimal", "off"}
+        if mode not in valid_modes:
+            raise ValueError(
+                "disk_cleanup_mode must be one of: compact, minimal, off."
+            )
+        return mode
+    
+    # @model_validator(mode="after")
+    # def _require_box1_when_two_box_ensemble(self):
+    #     # For ensembles that use a second box, require non-zero cores for box 1
+    #     if self.simulation_type in ("GEMC", "GCMC"):
+    #         if self.no_core_box_1 <= 0:
+    #             raise ValueError("no_core_box_1 must be > 0")
+    #     return self
+    
     @model_validator(mode="after")
     def _require_box1_when_two_box_ensemble(self):
-        # For ensembles that use a second box, require non-zero cores for box 1
-        if self.simulation_type in ("GEMC", "GCMC"):
-            if self.no_core_box_1 <= 0:
-                raise ValueError("no_core_box_1 must be > 0")
+        # Only two-box GEMC runs require NAMD cores for box 1.
+        # GCMC and one-box GEMC still use only NAMD box 0, so no_core_box_1
+        # may be zero for those cases.
+        if (
+            self.simulation_type == "GEMC"
+            and not self.only_use_box_0_for_namd_for_gemc
+            and self.no_core_box_1 <= 0
+        ):
+            raise ValueError(
+                "no_core_box_1 must be > 0 for GEMC with two NAMD boxes"
+            )
         return self
-    
+
     @field_validator('set_dims_box_0_list', 'set_dims_box_1_list', mode='before')
     def validate_dims_list(cls, v):
         if v is None:
