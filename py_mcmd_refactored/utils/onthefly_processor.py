@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Iterable, Optional, TextIO
 
@@ -319,8 +321,80 @@ def _parse_gomc_log(
         last_step,
     )
 
+def _append_dcd(
+    catdcd_bin: str | Path,
+    src_dcd: str | Path,
+    dst_dcd: str | Path,
+) -> bool:
+    """Append one DCD segment to a combined trajectory atomically."""
+    src = Path(src_dcd)
+    dst = Path(dst_dcd)
+
+    if not src.exists():
+        logger.warning(
+            "[OnTheFly] DCD source not found: %s",
+            src,
+        )
+        return False
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp = dst.with_name(f"{dst.name}.tmp")
+    tmp.unlink(missing_ok=True)
+
+    command = [
+        str(catdcd_bin),
+        "-o",
+        str(tmp),
+    ]
+
+    if dst.exists():
+        command.append(str(dst))
+
+    command.append(str(src))
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            logger.warning(
+                "[OnTheFly] catdcd failed: %s",
+                result.stderr[:200],
+            )
+            tmp.unlink(missing_ok=True)
+            return False
+
+        if not tmp.exists():
+            logger.warning(
+                "[OnTheFly] catdcd did not create output: %s",
+                tmp,
+            )
+            return False
+
+        tmp.replace(dst)
+        return True
+
+    except OSError as exc:
+        logger.warning(
+            "[OnTheFly] DCD append error: %s",
+            exc,
+        )
+        tmp.unlink(missing_ok=True)
+        return False
 class OnTheFlyProcessor:
-    """Append newly parsed NAMD/GOMC rows to combined outputs per cycle."""
+    """
+        Append newly parsed NAMD/GOMC rows to combined outputs per cycle.
+        
+        processing
+        trajectory handling
+        artifact preservation
+        combined-output formatting
+    """
 
     def __init__(
         self,
@@ -340,12 +414,49 @@ class OnTheFlyProcessor:
         self.namd_root = Path(cfg.path_namd_runs)
         self.gomc_root = Path(cfg.path_gomc_runs)
 
+        # self.sim_type = str(
+        #     cfg.simulation_type
+        # ).upper()
+
+        # self._managed_root = _discover_managed_root(
+        #     managed_root
+        # )
+
+        # self._current_step = 0
+
         self.sim_type = str(
             cfg.simulation_type
         ).upper()
 
         self._managed_root = _discover_managed_root(
             managed_root
+        )
+
+        self.catdcd_bin = Path(
+            getattr(
+                cfg,
+                "rel_path_to_combine_binary_catdcd",
+                (
+                    "required_data/bin/catdcd-4.0b/"
+                    "LINUXAMD64/bin/catdcd4.0/catdcd"
+                ),
+            )
+        )
+
+        self.combine_namd_dcd = bool(
+            getattr(
+                cfg,
+                "combine_namd_dcd_file",
+                True,
+            )
+        )
+
+        self.combine_gomc_dcd = bool(
+            getattr(
+                cfg,
+                "combine_gomc_dcd_file",
+                True,
+            )
         )
 
         self._current_step = 0
@@ -487,23 +598,58 @@ class OnTheFlyProcessor:
             / format_cycle_id(run_no, 10)
         )
 
+    # @staticmethod
+    # def _resolve_log_path(
+    #     runtime_dir: Path,
+    #     disk_dir: Path,
+    # ) -> Optional[Path]:
+    #     runtime_log = runtime_dir / "out.dat"
+
+    #     if runtime_log.exists():
+    #         return runtime_log
+
+    #     disk_log = disk_dir / "out.dat"
+
+    #     if disk_log.exists():
+    #         return disk_log
+
+    #     return None
+    @staticmethod
+    def _resolve_artifact_path(
+        runtime_dir: Path,
+        disk_dir: Path,
+        basename: str,
+    ) -> Optional[Path]:
+        runtime_path = runtime_dir / basename
+
+        if runtime_path.exists():
+            return runtime_path
+
+        disk_path = disk_dir / basename
+
+        if disk_path.exists():
+            return disk_path
+
+        return None
+
     @staticmethod
     def _resolve_log_path(
         runtime_dir: Path,
         disk_dir: Path,
     ) -> Optional[Path]:
-        runtime_log = runtime_dir / "out.dat"
+        return OnTheFlyProcessor._resolve_artifact_path(
+            runtime_dir,
+            disk_dir,
+            "out.dat",
+        )
 
-        if runtime_log.exists():
-            return runtime_log
-
-        disk_log = disk_dir / "out.dat"
-
-        if disk_log.exists():
-            return disk_log
-
-        return None
-
+    # def process_cycle(
+    #     self,
+    #     namd_run_no: int,
+    #     gomc_run_no: int,
+    # ) -> None:
+    #     self._process_namd_step(namd_run_no)
+    #     self._process_gomc_step(gomc_run_no)
     def process_cycle(
         self,
         namd_run_no: int,
@@ -511,6 +657,22 @@ class OnTheFlyProcessor:
     ) -> None:
         self._process_namd_step(namd_run_no)
         self._process_gomc_step(gomc_run_no)
+
+        if (
+            self.combine_namd_dcd
+            and self.sim_type in {"NVT", "NPT"}
+        ):
+            self._append_namd_dcd(namd_run_no)
+
+        if self.combine_gomc_dcd:
+            self._append_gomc_dcd(gomc_run_no)
+
+        self._copy_merged_psf(gomc_run_no)
+
+        self._archive_cycle_logs(
+            namd_run_no,
+            gomc_run_no,
+        )
 
     def close(self) -> None:
         handles = [
@@ -915,7 +1077,224 @@ class OnTheFlyProcessor:
 
             handle.write(content)
 
+    def _append_namd_dcd(
+        self,
+        run_no: int,
+    ) -> bool:
+        src = self._resolve_artifact_path(
+            self._runtime_namd_dir(
+                run_no,
+                0,
+            ),
+            self._namd_dir(
+                run_no,
+                0,
+            ),
+            "namdOut.dcd",
+        )
 
+        if src is None:
+            logger.warning(
+                "[OnTheFly] NAMD DCD missing for run %d",
+                run_no,
+            )
+            return False
+
+        dst = (
+            self.combined_dir
+            / "combined_box_0_NAMD_dcd_files.dcd"
+        )
+
+        return _append_dcd(
+            self.catdcd_bin,
+            src,
+            dst,
+        )
+    
+    def _append_gomc_dcd(
+        self,
+        run_no: int,
+    ) -> dict[int, bool]:
+        results: dict[int, bool] = {}
+
+        boxes = [0]
+
+        if self.sim_type in {"GEMC", "GCMC"}:
+            boxes.append(1)
+
+        for box_no in boxes:
+            basename = (
+                f"Output_data_BOX_{box_no}.dcd"
+            )
+
+            src = self._resolve_artifact_path(
+                self._runtime_gomc_dir(run_no),
+                self._gomc_dir(run_no),
+                basename,
+            )
+
+            if src is None:
+                logger.warning(
+                    "[OnTheFly] GOMC box-%d DCD missing "
+                    "for run %d",
+                    box_no,
+                    run_no,
+                )
+                results[box_no] = False
+                continue
+
+            dst = (
+                self.combined_dir
+                / (
+                    f"combined_box_{box_no}_"
+                    "GOMC_dcd_files.dcd"
+                )
+            )
+
+            results[box_no] = _append_dcd(
+                self.catdcd_bin,
+                src,
+                dst,
+            )
+
+        return results
+    
+    def _copy_merged_psf(
+        self,
+        gomc_run_no: int,
+    ) -> bool:
+        dst = (
+            self.combined_dir
+            / "Output_data_merged.psf"
+        )
+
+        if dst.exists():
+            return False
+
+        src = self._resolve_artifact_path(
+            self._runtime_gomc_dir(
+                gomc_run_no
+            ),
+            self._gomc_dir(gomc_run_no),
+            "Output_data_merged.psf",
+        )
+
+        if src is None:
+            logger.warning(
+                "[OnTheFly] Merged GOMC PSF missing "
+                "for run %d",
+                gomc_run_no,
+            )
+            return False
+
+        try:
+            shutil.copy2(
+                src,
+                dst,
+            )
+            return True
+
+        except OSError as exc:
+            logger.warning(
+                "[OnTheFly] Failed to copy merged PSF "
+                "%s: %s",
+                src,
+                exc,
+            )
+            return False
+        
+    def _archive_cycle_log(
+        self,
+        *,
+        engine: str,
+        runtime_dir: Path,
+        disk_dir: Path,
+    ) -> bool:
+        src = self._resolve_log_path(
+            runtime_dir,
+            disk_dir,
+        )
+
+        if src is None:
+            return False
+
+        logs_dir = (
+            self.combined_dir
+            / "cycle_logs"
+        )
+
+        logs_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        dst = (
+            logs_dir
+            / (
+                f"{engine.upper()}_"
+                f"{runtime_dir.name}_out.dat"
+            )
+        )
+
+        if dst.exists():
+            return False
+
+        try:
+            shutil.copy2(
+                src,
+                dst,
+            )
+            return True
+
+        except OSError as exc:
+            logger.warning(
+                "[OnTheFly] Failed to archive %s: %s",
+                src,
+                exc,
+            )
+            return False
+        
+    def _archive_cycle_logs(
+        self,
+        namd_run_no: int,
+        gomc_run_no: int,
+    ) -> None:
+        namd_boxes = [0]
+
+        if (
+            self.sim_type == "GEMC"
+            and not bool(
+                getattr(
+                    self.cfg,
+                    "only_use_box_0_for_namd_for_gemc",
+                    True,
+                )
+            )
+        ):
+            namd_boxes.append(1)
+
+        for box_no in namd_boxes:
+            self._archive_cycle_log(
+                engine="NAMD",
+                runtime_dir=self._runtime_namd_dir(
+                    namd_run_no,
+                    box_no,
+                ),
+                disk_dir=self._namd_dir(
+                    namd_run_no,
+                    box_no,
+                ),
+            )
+
+        self._archive_cycle_log(
+            engine="GOMC",
+            runtime_dir=self._runtime_gomc_dir(
+                gomc_run_no
+            ),
+            disk_dir=self._gomc_dir(
+                gomc_run_no
+            ),
+        )
     def _append_combined_rows(
         self,
         rows: list[dict[str, str]],
