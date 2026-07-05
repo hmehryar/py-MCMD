@@ -296,8 +296,42 @@ def _patch_managed_store_dry_run_dependencies(tmp_path: Path, monkeypatch):
     )
 
 
-def test_integration_dry_run_default_mode_persists_only_out_dat_on_disk(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("PY_MCMD_MANAGED_OUTPUT_ROOT", str(tmp_path / "managed_runtime"))
+# def test_integration_dry_run_default_mode_persists_only_out_dat_on_disk(tmp_path: Path, monkeypatch):
+#     monkeypatch.setenv("PY_MCMD_MANAGED_OUTPUT_ROOT", str(tmp_path / "managed_runtime"))
+#     _patch_managed_store_dry_run_dependencies(tmp_path, monkeypatch)
+
+#     cfg = _cfg(tmp_path, developer_mode=False)
+#     orch = mgr.SimulationOrchestrator(cfg, dry_run=True)
+#     summary = orch.run()
+
+#     assert summary["cycles_completed"] == 2
+
+#     namd_disk_run0 = tmp_path / "NAMD" / "0000000000_a"
+#     namd_disk_run2 = tmp_path / "NAMD" / "0000000002_a"
+#     gomc_disk_run1 = tmp_path / "GOMC" / "0000000001"
+#     gomc_disk_run3 = tmp_path / "GOMC" / "0000000003"
+
+#     assert (namd_disk_run0 / "out.dat").exists()
+#     assert (namd_disk_run2 / "out.dat").exists()
+#     assert (gomc_disk_run1 / "out.dat").exists()
+#     assert (gomc_disk_run3 / "out.dat").exists()
+
+#     assert not (namd_disk_run0 / "in.conf").exists()
+#     assert not (namd_disk_run2 / "in.conf").exists()
+#     assert not (gomc_disk_run1 / "in.conf").exists()
+#     assert not (gomc_disk_run3 / "in.conf").exists()
+
+#     managed_root = tmp_path / "managed_runtime"
+#     assert not (managed_root / "NAMD").exists()
+#     assert not (managed_root / "GOMC").exists()
+def test_integration_dry_run_default_mode_keeps_managed_outputs_off_disk(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        "PY_MCMD_MANAGED_OUTPUT_ROOT",
+        str(tmp_path / "managed_runtime"),
+    )
     _patch_managed_store_dry_run_dependencies(tmp_path, monkeypatch)
 
     cfg = _cfg(tmp_path, developer_mode=False)
@@ -311,10 +345,10 @@ def test_integration_dry_run_default_mode_persists_only_out_dat_on_disk(tmp_path
     gomc_disk_run1 = tmp_path / "GOMC" / "0000000001"
     gomc_disk_run3 = tmp_path / "GOMC" / "0000000003"
 
-    assert (namd_disk_run0 / "out.dat").exists()
-    assert (namd_disk_run2 / "out.dat").exists()
-    assert (gomc_disk_run1 / "out.dat").exists()
-    assert (gomc_disk_run3 / "out.dat").exists()
+    assert not (namd_disk_run0 / "out.dat").exists()
+    assert not (namd_disk_run2 / "out.dat").exists()
+    assert not (gomc_disk_run1 / "out.dat").exists()
+    assert not (gomc_disk_run3 / "out.dat").exists()
 
     assert not (namd_disk_run0 / "in.conf").exists()
     assert not (namd_disk_run2 / "in.conf").exists()

@@ -279,12 +279,54 @@ def test_no_core_box1_must_be_int_ge0():
     cfg = make_cfg(no_core_box_1=0)  # ok
     assert cfg.no_core_box_1 == 0
 
-@pytest.mark.parametrize("ensemble", ["GEMC", "GCMC"])
-def test_box1_required_for_two_box_ensembles(ensemble):
+# @pytest.mark.parametrize("ensemble", ["GEMC", "GCMC"])
+# def test_box1_required_for_two_box_ensembles(ensemble):
+#     with pytest.raises((ValidationError, ValueError)):
+#         make_cfg(simulation_type=ensemble, no_core_box_1=0)  # must be >=1
+#     cfg = make_cfg(simulation_type=ensemble, no_core_box_1=2)
+#     assert cfg.no_core_box_1 == 2
+
+
+# GCMC
+#     no_core_box_1 = 0
+#     VALID
+
+# GEMC + only_use_box_0_for_namd_for_gemc=True
+#     no_core_box_1 = 0
+#     VALID
+
+# GEMC + only_use_box_0_for_namd_for_gemc=False
+#     no_core_box_1 = 0
+#     INVALID"
+def test_box1_required_for_two_box_gemc():
     with pytest.raises((ValidationError, ValueError)):
-        make_cfg(simulation_type=ensemble, no_core_box_1=0)  # must be >=1
-    cfg = make_cfg(simulation_type=ensemble, no_core_box_1=2)
+        make_cfg(
+            simulation_type="GEMC",
+            only_use_box_0_for_namd_for_gemc=False,
+            no_core_box_1=0,
+        )
+
+    cfg = make_cfg(
+        simulation_type="GEMC",
+        only_use_box_0_for_namd_for_gemc=False,
+        no_core_box_1=2,
+    )
     assert cfg.no_core_box_1 == 2
+
+
+def test_box1_may_be_zero_for_gcmc_and_one_box_gemc():
+    gcmc_cfg = make_cfg(
+        simulation_type="GCMC",
+        no_core_box_1=0,
+    )
+    assert gcmc_cfg.no_core_box_1 == 0
+
+    gemc_cfg = make_cfg(
+        simulation_type="GEMC",
+        only_use_box_0_for_namd_for_gemc=True,
+        no_core_box_1=0,
+    )
+    assert gemc_cfg.no_core_box_1 == 0
 
 @pytest.mark.parametrize("ensemble", ["NVT", "NPT"])
 def test_box1_may_be_zero_for_single_box_ensembles(ensemble):

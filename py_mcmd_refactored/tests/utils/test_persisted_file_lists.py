@@ -53,44 +53,88 @@ def make_cfg(tmp_path: Path, **kw) -> SimulationConfig:
     return SimulationConfig(**base)
 
 
-def test_default_allow_lists_are_out_dat_only():
-    assert NAMD_PERSISTED_BASENAMES == ["out.dat"]
-    assert GOMC_PERSISTED_BASENAMES == ["out.dat"]
+# def test_default_allow_lists_are_out_dat_only():
+#     assert NAMD_PERSISTED_BASENAMES == ["out.dat"]
+#     assert GOMC_PERSISTED_BASENAMES == ["out.dat"]
+def test_default_allow_lists_are_empty():
+    assert NAMD_PERSISTED_BASENAMES == []
+    assert GOMC_PERSISTED_BASENAMES == []
 
 
+# def test_should_persist_uses_engine_allow_list():
+#     assert should_persist("NAMD", "out.dat") is True
+#     assert should_persist("GOMC", "out.dat") is True
+
+#     assert should_persist("NAMD", "in.conf") is False
+#     assert should_persist("GOMC", "Output_data_BOX_0_restart.coor") is False
+
+#     assert should_persist("namd", "/tmp/any/out.dat") is True
+#     assert should_persist("gomc", "/tmp/any/in.conf") is False
 def test_should_persist_uses_engine_allow_list():
-    assert should_persist("NAMD", "out.dat") is True
-    assert should_persist("GOMC", "out.dat") is True
+    assert should_persist("NAMD", "out.dat") is False
+    assert should_persist("GOMC", "out.dat") is False
 
     assert should_persist("NAMD", "in.conf") is False
-    assert should_persist("GOMC", "Output_data_BOX_0_restart.coor") is False
+    assert should_persist(
+        "GOMC",
+        "Output_data_BOX_0_restart.coor",
+    ) is False
 
-    assert should_persist("namd", "/tmp/any/out.dat") is True
+    assert should_persist("namd", "/tmp/any/out.dat") is False
     assert should_persist("gomc", "/tmp/any/in.conf") is False
 
 
-def test_persisted_output_path_returns_disk_path_only_for_allow_listed_file(tmp_path: Path):
+# def test_persisted_output_path_returns_disk_path_only_for_allow_listed_file(tmp_path: Path):
+#     run_dir = tmp_path / "NAMD" / "00000000_a"
+#     assert persisted_output_path("NAMD", run_dir, "out.dat") == run_dir / "out.dat"
+
+#     with pytest.raises(ValueError):
+#         persisted_output_path("NAMD", run_dir, "in.conf")
+def test_persisted_output_path_rejects_files_when_default_allow_list_is_empty(
+    tmp_path: Path,
+):
     run_dir = tmp_path / "NAMD" / "00000000_a"
-    assert persisted_output_path("NAMD", run_dir, "out.dat") == run_dir / "out.dat"
+
+    with pytest.raises(ValueError):
+        persisted_output_path("NAMD", run_dir, "out.dat")
 
     with pytest.raises(ValueError):
         persisted_output_path("NAMD", run_dir, "in.conf")
 
 
-def test_build_namd_execution_plan_routes_stdout_through_allow_list_helper(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# def test_build_namd_execution_plan_routes_stdout_through_allow_list_helper(
+#     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+# ):
+#     cfg = make_cfg(tmp_path, simulation_type="NPT", only_use_box_0_for_namd_for_gemc=True)
+
+#     calls: list[tuple[str, Path, str]] = []
+
+#     def fake_persisted_output_path(engine: str, run_dir: Path, basename: str) -> Path:
+#         calls.append((engine, Path(run_dir), basename))
+#         return Path(run_dir) / f"persisted-{basename}"
+
+#     monkeypatch.setattr("engines.namd.plan.persisted_output_path", fake_persisted_output_path)
+
+#     box0_dir = tmp_path / "NAMD" / "00000000_a"
+#     plan = build_namd_execution_plan(
+#         cfg,
+#         exec_path="namd2",
+#         box0_dir=box0_dir,
+#         box1_dir=None,
+#     )
+
+#     assert plan.box0.stdout_path == box0_dir / "persisted-out.dat"
+#     assert calls == [("NAMD", box0_dir, "out.dat")]
+def test_build_namd_execution_plan_routes_stdout_to_execution_directory(
+    tmp_path: Path,
 ):
-    cfg = make_cfg(tmp_path, simulation_type="NPT", only_use_box_0_for_namd_for_gemc=True)
+    cfg = make_cfg(
+        tmp_path,
+        simulation_type="NPT",
+        only_use_box_0_for_namd_for_gemc=True,
+    )
+    box0_dir = tmp_path / "managed" / "NAMD" / "0000000000_a"
 
-    calls: list[tuple[str, Path, str]] = []
-
-    def fake_persisted_output_path(engine: str, run_dir: Path, basename: str) -> Path:
-        calls.append((engine, Path(run_dir), basename))
-        return Path(run_dir) / f"persisted-{basename}"
-
-    monkeypatch.setattr("engines.namd.plan.persisted_output_path", fake_persisted_output_path)
-
-    box0_dir = tmp_path / "NAMD" / "00000000_a"
     plan = build_namd_execution_plan(
         cfg,
         exec_path="namd2",
@@ -98,8 +142,7 @@ def test_build_namd_execution_plan_routes_stdout_through_allow_list_helper(
         box1_dir=None,
     )
 
-    assert plan.box0.stdout_path == box0_dir / "persisted-out.dat"
-    assert calls == [("NAMD", box0_dir, "out.dat")]
+    assert plan.box0.stdout_path == box0_dir / "out.dat"
 
 
 def test_namd_engine_run_steps_routes_stdout_through_allow_list_helper(
