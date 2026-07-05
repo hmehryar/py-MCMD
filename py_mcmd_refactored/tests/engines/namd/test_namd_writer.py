@@ -128,12 +128,47 @@ def test_compute_run_paths_and_read_pdb_lines_fresh(tmp_path):
     assert repl["psf_box_file"].endswith("box0.psf")
     assert any("CRYST1" in L for L in lines)
 
-def test_compute_run_paths_and_read_pdb_lines_restart(tmp_path):
+# def test_compute_run_paths_and_read_pdb_lines_restart(tmp_path):
+#     base = tmp_path
+#     namd_dir = base / "NAMD" / "0000000008_b"
+#     namd_dir.mkdir(parents=True)
+#     gomc = base / "GOMC"; gomc.mkdir()
+#     (gomc / "Output_data_BOX_1_restart.pdb").write_text("CRYST1   10 20 30 90 90 90\n")
+#     (gomc / "Output_data_BOX_1_restart.psf").write_text("PSF\n")
+#     (gomc / "Output_data_BOX_1_restart.coor").write_text("COOR\n")
+#     (gomc / "Output_data_BOX_1_restart.xsc").write_text("XSC\n")
+#     (gomc / "Output_data_BOX_1_restart.vel").write_text("VEL\n")
+
+#     repl, lines = _compute_run_paths_and_read_pdb_lines(
+#         python_file_directory=base,
+#         gomc_newdir=gomc,
+#         namd_box_x_newdir=namd_dir,
+#         run_no=1,
+#         box_number=1,
+#         starting_pdb_box_x_file="unused",
+#         starting_psf_box_x_file="unused",
+#     )
+
+#     assert repl["Bool_restart"] == "true"
+#     assert repl["pdb_box_file"].endswith("Output_data_BOX_1_restart.pdb")
+#     assert repl["psf_box_file"].endswith("Output_data_BOX_1_restart.psf")
+#     assert repl["coor_file"].endswith("Output_data_BOX_1_restart.coor")
+#     assert repl["xsc_file"].endswith("Output_data_BOX_1_restart.xsc")
+#     assert repl["vel_file"].endswith("Output_data_BOX_1_restart.vel")
+#     assert any("CRYST1" in L for L in lines)
+def test_compute_run_paths_and_read_pdb_lines_restart_with_vel_uses_binary_restart(
+    tmp_path,
+):
     base = tmp_path
     namd_dir = base / "NAMD" / "0000000008_b"
     namd_dir.mkdir(parents=True)
-    gomc = base / "GOMC"; gomc.mkdir()
-    (gomc / "Output_data_BOX_1_restart.pdb").write_text("CRYST1   10 20 30 90 90 90\n")
+
+    gomc = base / "GOMC"
+    gomc.mkdir()
+
+    (gomc / "Output_data_BOX_1_restart.pdb").write_text(
+        "CRYST1   10 20 30 90 90 90\n"
+    )
     (gomc / "Output_data_BOX_1_restart.psf").write_text("PSF\n")
     (gomc / "Output_data_BOX_1_restart.coor").write_text("COOR\n")
     (gomc / "Output_data_BOX_1_restart.xsc").write_text("XSC\n")
@@ -150,12 +185,68 @@ def test_compute_run_paths_and_read_pdb_lines_restart(tmp_path):
     )
 
     assert repl["Bool_restart"] == "true"
-    assert repl["pdb_box_file"].endswith("Output_data_BOX_1_restart.pdb")
-    assert repl["psf_box_file"].endswith("Output_data_BOX_1_restart.psf")
-    assert repl["coor_file"].endswith("Output_data_BOX_1_restart.coor")
-    assert repl["xsc_file"].endswith("Output_data_BOX_1_restart.xsc")
-    assert repl["vel_file"].endswith("Output_data_BOX_1_restart.vel")
-    assert any("CRYST1" in L for L in lines)
+    assert repl["pdb_box_file"].endswith(
+        "Output_data_BOX_1_restart.pdb"
+    )
+    assert repl["psf_box_file"].endswith(
+        "Output_data_BOX_1_restart.psf"
+    )
+    assert repl["coor_file"].endswith(
+        "Output_data_BOX_1_restart.coor"
+    )
+    assert repl["xsc_file"].endswith(
+        "Output_data_BOX_1_restart.xsc"
+    )
+    assert repl["vel_file"].endswith(
+        "Output_data_BOX_1_restart.vel"
+    )
+    assert any("CRYST1" in line for line in lines)
+
+def test_compute_run_paths_and_read_pdb_lines_restart_without_vel_uses_pdb_psf_fallback(
+    tmp_path,
+):
+    base = tmp_path
+    namd_dir = base / "NAMD" / "0000000008_a"
+    namd_dir.mkdir(parents=True)
+
+    gomc = base / "GOMC"
+    gomc.mkdir()
+
+    restart_pdb = gomc / "Output_data_BOX_0_restart.pdb"
+    restart_psf = gomc / "Output_data_BOX_0_restart.psf"
+
+    restart_pdb.write_text(
+        "CRYST1   11 22 33 90 90 90\n"
+    )
+    restart_psf.write_text("PSF\n")
+
+    (gomc / "Output_data_BOX_0_restart.coor").write_text("COOR\n")
+    (gomc / "Output_data_BOX_0_restart.xsc").write_text("XSC\n")
+
+    repl, lines = _compute_run_paths_and_read_pdb_lines(
+        python_file_directory=base,
+        gomc_newdir=gomc,
+        namd_box_x_newdir=namd_dir,
+        run_no=1,
+        box_number=0,
+        starting_pdb_box_x_file="unused",
+        starting_psf_box_x_file="unused",
+    )
+
+    assert repl["Bool_restart"] == "false"
+    assert repl["pdb_box_file"].endswith(
+        "Output_data_BOX_0_restart.pdb"
+    )
+    assert repl["psf_box_file"].endswith(
+        "Output_data_BOX_0_restart.psf"
+    )
+    assert repl["coor_file"] == "NA"
+    assert repl["xsc_file"] == "NA"
+    assert repl["vel_file"] == "NA"
+    assert any(
+        "CRYST1   11 22 33" in line
+        for line in lines
+    )
 
 
 from engines.namd.namd_writer import _parse_cryst1
@@ -362,7 +453,11 @@ def test_write_namd_conf_file_fresh(tmp_path, monkeypatch):
     ]
     assert not any(tok in txt for tok in leftovers)
 
-def test_write_namd_conf_file_restart(tmp_path, monkeypatch):
+# def test_write_namd_conf_file_restart(tmp_path, monkeypatch):
+def test_write_namd_conf_file_restart_with_vel_uses_binary_restart(
+    tmp_path,
+    monkeypatch,
+):
     from py_mcmd_refactored.engines.namd import namd_writer as mod
     monkeypatch.setattr(mod, "starting_ff_file_list_namd", [])
     monkeypatch.setattr(mod, "check_for_pdb_dims_and_override", None)
@@ -371,8 +466,19 @@ def test_write_namd_conf_file_restart(tmp_path, monkeypatch):
     tpl = tmp_path / "tpl.conf"
     tpl.write_text("set r Bool_restart\nPMEGridSizeX X_PME_GRID_DIM\n")
 
-    gomc = tmp_path / "GOMC"; gomc.mkdir()
-    (gomc / "Output_data_BOX_1_restart.pdb").write_text("CRYST1 10 20 30 90 90 90\n")
+    # gomc = tmp_path / "GOMC"; gomc.mkdir()
+    # (gomc / "Output_data_BOX_1_restart.pdb").write_text("CRYST1 10 20 30 90 90 90\n")
+    # (tmp_path / "NAMD").mkdir()
+    gomc = tmp_path / "GOMC"
+    gomc.mkdir()
+
+    (gomc / "Output_data_BOX_1_restart.pdb").write_text(
+        "CRYST1 10 20 30 90 90 90\n"
+    )
+    (gomc / "Output_data_BOX_1_restart.vel").write_text(
+        "VEL\n"
+    )
+
     (tmp_path / "NAMD").mkdir()
 
     out_dir = write_namd_conf_file(

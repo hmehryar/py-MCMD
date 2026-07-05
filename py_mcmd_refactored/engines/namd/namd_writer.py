@@ -105,6 +105,58 @@ from pathlib import Path
 import os
 from typing import Tuple, Iterable, Dict
 
+# def _compute_run_paths_and_read_pdb_lines(
+#     python_file_directory: Path | str,
+#     gomc_newdir: Path | str,
+#     namd_box_x_newdir: Path,
+#     run_no: int,
+#     box_number: int,
+#     starting_pdb_box_x_file: Path | str,
+#     starting_psf_box_x_file: Path | str,
+# ) -> Tuple[Dict[str, str], Iterable[str]]:
+#     """
+#     Build placeholder replacements and load the PDB lines used to parse CRYST1.
+
+#     Returns:
+#       (replacements: dict[str,str], pdb_lines: list[str])
+
+#     Keys in replacements:
+#       - pdb_box_file, psf_box_file, coor_file, xsc_file, vel_file, Bool_restart
+#     """
+#     python_file_directory = Path(python_file_directory)
+#     gomc_newdir = Path(gomc_newdir)
+
+#     if run_no != 0:
+#         # Restart: all inputs from GOMC restart files (relative to NAMD box dir)
+#         gomc_rel = os.path.relpath(str(gomc_newdir), str(namd_box_x_newdir))
+#         replacements = {
+#             "pdb_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.pdb",
+#             "psf_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.psf",
+#             "coor_file":     f"{gomc_rel}/Output_data_BOX_{box_number}_restart.coor",
+#             "xsc_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.xsc",
+#             "vel_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.vel",
+#             "Bool_restart":  "true",
+#         }
+#         pdb_path = gomc_newdir / f"Output_data_BOX_{box_number}_restart.pdb"
+#         pdb_lines = pdb_path.read_text().splitlines(True)
+#     else:
+#         # Fresh run: use starting pdb/psf (resolved under python_file_directory)
+#         pdb_abs = python_file_directory / starting_pdb_box_x_file
+#         psf_abs = python_file_directory / starting_psf_box_x_file
+#         pdb_rel = os.path.relpath(str(pdb_abs), str(namd_box_x_newdir))
+#         psf_rel = os.path.relpath(str(psf_abs), str(namd_box_x_newdir))
+#         replacements = {
+#             "pdb_box_file": pdb_rel,
+#             "psf_box_file": psf_rel,
+#             "coor_file":    "NA",
+#             "xsc_file":     "NA",
+#             "vel_file":     "NA",
+#             "Bool_restart": "false",
+#         }
+#         pdb_lines = pdb_abs.read_text().splitlines(True)
+
+#     return replacements, pdb_lines
+
 def _compute_run_paths_and_read_pdb_lines(
     python_file_directory: Path | str,
     gomc_newdir: Path | str,
@@ -127,30 +179,92 @@ def _compute_run_paths_and_read_pdb_lines(
     gomc_newdir = Path(gomc_newdir)
 
     if run_no != 0:
-        # Restart: all inputs from GOMC restart files (relative to NAMD box dir)
-        gomc_rel = os.path.relpath(str(gomc_newdir), str(namd_box_x_newdir))
-        replacements = {
-            "pdb_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.pdb",
-            "psf_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.psf",
-            "coor_file":     f"{gomc_rel}/Output_data_BOX_{box_number}_restart.coor",
-            "xsc_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.xsc",
-            "vel_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.vel",
-            "Bool_restart":  "true",
-        }
-        pdb_path = gomc_newdir / f"Output_data_BOX_{box_number}_restart.pdb"
-        pdb_lines = pdb_path.read_text().splitlines(True)
+        # Restart from GOMC. Use the full binary restart only when GOMC
+        # produced a velocity restart file. Some GOMC configurations do
+        # not write .vel files.
+        gomc_rel = os.path.relpath(
+            str(gomc_newdir),
+            str(namd_box_x_newdir),
+        )
+        pdb_abs = (
+            gomc_newdir
+            / f"Output_data_BOX_{box_number}_restart.pdb"
+        )
+        psf_abs = (
+            gomc_newdir
+            / f"Output_data_BOX_{box_number}_restart.psf"
+        )
+        vel_abs = (
+            gomc_newdir
+            / f"Output_data_BOX_{box_number}_restart.vel"
+        )
+
+        if vel_abs.exists():
+            replacements = {
+                "pdb_box_file": (
+                    f"{gomc_rel}/"
+                    f"Output_data_BOX_{box_number}_restart.pdb"
+                ),
+                "psf_box_file": (
+                    f"{gomc_rel}/"
+                    f"Output_data_BOX_{box_number}_restart.psf"
+                ),
+                "coor_file": (
+                    f"{gomc_rel}/"
+                    f"Output_data_BOX_{box_number}_restart.coor"
+                ),
+                "xsc_file": (
+                    f"{gomc_rel}/"
+                    f"Output_data_BOX_{box_number}_restart.xsc"
+                ),
+                "vel_file": (
+                    f"{gomc_rel}/"
+                    f"Output_data_BOX_{box_number}_restart.vel"
+                ),
+                "Bool_restart": "true",
+            }
+        else:
+            # Without a GOMC velocity restart file, use the restart PDB/PSF
+            # for coordinates and topology and let NAMD generate velocities
+            # from the configured simulation temperature.
+            pdb_rel = os.path.relpath(
+                str(pdb_abs),
+                str(namd_box_x_newdir),
+            )
+            psf_rel = os.path.relpath(
+                str(psf_abs),
+                str(namd_box_x_newdir),
+            )
+
+            replacements = {
+                "pdb_box_file": pdb_rel,
+                "psf_box_file": psf_rel,
+                "coor_file": "NA",
+                "xsc_file": "NA",
+                "vel_file": "NA",
+                "Bool_restart": "false",
+            }
+
+        pdb_lines = pdb_abs.read_text().splitlines(True)
+
     else:
         # Fresh run: use starting pdb/psf (resolved under python_file_directory)
         pdb_abs = python_file_directory / starting_pdb_box_x_file
         psf_abs = python_file_directory / starting_psf_box_x_file
-        pdb_rel = os.path.relpath(str(pdb_abs), str(namd_box_x_newdir))
-        psf_rel = os.path.relpath(str(psf_abs), str(namd_box_x_newdir))
+        pdb_rel = os.path.relpath(
+            str(pdb_abs),
+            str(namd_box_x_newdir),
+        )
+        psf_rel = os.path.relpath(
+            str(psf_abs),
+            str(namd_box_x_newdir),
+        )
         replacements = {
             "pdb_box_file": pdb_rel,
             "psf_box_file": psf_rel,
-            "coor_file":    "NA",
-            "xsc_file":     "NA",
-            "vel_file":     "NA",
+            "coor_file": "NA",
+            "xsc_file": "NA",
+            "vel_file": "NA",
             "Bool_restart": "false",
         }
         pdb_lines = pdb_abs.read_text().splitlines(True)
