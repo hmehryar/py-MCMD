@@ -423,3 +423,441 @@ def test_restart_missing_checkpoint_is_allowed_in_dry_run(tmp_path: Path):
     conf = (out_dir / "in.conf").read_text()
 
     assert "false Output_data_restart.chk" in conf
+
+
+def _write_restart_routing_template(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "all_parameter_files\n"
+        "binCoordinates 0 coor_box_0_file\n"
+        "extendedSystem 0 xsc_box_0_file\n"
+        "binVelocities 0 vel_box_0_file\n"
+        "Coordinates 0 pdb_file_box_0_file\n"
+        "Structure 0 psf_file_box_0_file\n"
+        "CellBasisVector1 0 x_dim_box_0 0.0 0.0\n"
+        "CellBasisVector2 0 0.0 y_dim_box_0 0.0\n"
+        "CellBasisVector3 0 0.0 0.0 z_dim_box_0\n"
+        "binCoordinates 1 coor_box_1_file\n"
+        "extendedSystem 1 xsc_box_1_file\n"
+        "binVelocities 1 vel_box_1_file\n"
+        "Coordinates 1 pdb_file_box_1_file\n"
+        "Structure 1 psf_file_box_1_file\n"
+        "CellBasisVector1 1 x_dim_box_1 0.0 0.0\n"
+        "CellBasisVector2 1 0.0 y_dim_box_1 0.0\n"
+        "CellBasisVector3 1 0.0 0.0 z_dim_box_1\n"
+        "Restart restart_true_or_false\n"
+        "RunSteps GOMC_Run_Steps\n"
+        "RestartFreq GOMC_RST_Coor_CKpoint_Steps\n"
+        "ConsoleFreq GOMC_console_BLKavg_Hist_Steps\n"
+        "HistFreq GOMC_Hist_sample_Steps\n"
+        "Temperature System_temp_set\n"
+        "Pressure System_press_set\n"
+        "EquilSteps GOMC_Equilb_Steps\n"
+        "AdjSteps GOMC_Adj_Steps\n"
+        "RestartCheckpoint Restart_Checkpoint_file\n"
+        "mu_ChemPot_K_or_P_Fugacitiy_bar_all\n"
+    )
+
+def _prepare_restart_routing_inputs(proj: Path):
+    inputs = proj / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+
+    pdb0 = inputs / "b0.pdb"
+    pdb1 = inputs / "b1.pdb"
+    psf0 = inputs / "b0.psf"
+    psf1 = inputs / "b1.psf"
+
+    pdb0.write_text(_pdb_cryst1(10, 20, 30))
+    pdb1.write_text(_pdb_cryst1(40, 50, 60))
+    psf0.write_text("psf0")
+    psf1.write_text("psf1")
+
+    starts = GOMCStartFiles(
+        pdb0.relative_to(proj),
+        pdb1.relative_to(proj),
+        psf0.relative_to(proj),
+        psf1.relative_to(proj),
+    )
+    return starts
+
+
+def _prepare_namd_restart_dir(
+    proj: Path,
+    name: str,
+    dims: tuple[float, float, float],
+) -> Path:
+    namd_dir = proj / "NAMD" / name
+    namd_dir.mkdir(parents=True, exist_ok=True)
+
+    (namd_dir / "namdOut.restart.coor").write_text("coor")
+    (namd_dir / "namdOut.restart.xsc").write_text(
+        _xsc(*dims)
+    )
+    (namd_dir / "namdOut.restart.vel").write_text("vel")
+
+    return namd_dir
+
+@pytest.mark.parametrize(
+    (
+        "simulation_type",
+        "only_use_box_0_for_namd_for_gemc",
+    ),
+    [
+        ("GCMC", False),
+        ("GEMC", True),
+    ],
+)
+
+# The same test executes both:
+# GCMC
+# and
+# GEMC + only_use_box_0_for_namd_for_gemc=True
+def test_first_cycle_gcmc_and_one_box_gemc_strip_all_binary_restart_lines(
+    tmp_path: Path,
+    simulation_type: str,
+    only_use_box_0_for_namd_for_gemc: bool,
+):
+    proj = tmp_path / "proj"
+    tpl = proj / "templates" / "gomc.tpl"
+    _write_restart_routing_template(tpl)
+
+    namd0 = _prepare_namd_restart_dir(
+        proj,
+        "0000000000_a",
+        (11.0, 21.0, 31.0),
+    )
+    starts = _prepare_restart_routing_inputs(proj)
+
+    cfg = _make_cfg(
+        simulation_type=simulation_type,
+        only_use_box_0_for_namd_for_gemc=(
+            only_use_box_0_for_namd_for_gemc
+        ),
+    )
+    io = GOMCIOPaths(
+        python_file_directory=proj,
+        path_gomc_runs=Path("GOMC"),
+        path_gomc_template=tpl.relative_to(proj),
+        namd_box_0_dir=namd0,
+        namd_box_1_dir=None,
+        previous_gomc_dir=None,
+    )
+
+    out_dir = write_gomc_conf_file(
+        cfg,
+        io,
+        run_no=1,
+        sim=GOMCSimParams(
+            1000,
+            100,
+            50,
+            25,
+            300.0,
+            1.0,
+        ),
+        starts=starts,
+    )
+    conf = (out_dir / "in.conf").read_text()
+
+    for box_number in (0, 1):
+        assert f"binCoordinates {box_number}" not in conf
+        assert f"extendedSystem {box_number}" not in conf
+        assert f"binVelocities {box_number}" not in conf
+
+    assert "Coordinates 0" in conf
+    assert "Structure 0" in conf
+    assert "Coordinates 1" in conf
+    assert "Structure 1" in conf
+
+    assert "inputs/b0.pdb" in conf
+    assert "inputs/b1.pdb" in conf
+
+    assert "Restart false" in conf
+
+def test_subsequent_gcmc_uses_box1_restart_without_velocity_file(
+    tmp_path: Path,
+):
+    proj = tmp_path / "proj"
+    tpl = proj / "templates" / "gomc.tpl"
+    _write_restart_routing_template(tpl)
+
+    namd0 = _prepare_namd_restart_dir(
+        proj,
+        "0000000002_a",
+        (12.0, 22.0, 32.0),
+    )
+    starts = _prepare_restart_routing_inputs(proj)
+
+    prev_gomc = proj / "GOMC" / "0000000001"
+    prev_gomc.mkdir(parents=True)
+
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.coor"
+    ).write_text("coor")
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.xsc"
+    ).write_text(
+        _xsc(42.0, 52.0, 62.0)
+    )
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.pdb"
+    ).write_text(
+        _pdb_cryst1(42, 52, 62)
+    )
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.psf"
+    ).write_text("psf1")
+    (
+        prev_gomc
+        / "Output_data_restart.chk"
+    ).write_text("chk")
+
+    # Intentionally no Output_data_BOX_1_restart.vel.
+
+    cfg = _make_cfg(
+        simulation_type="GCMC",
+    )
+    io = GOMCIOPaths(
+        python_file_directory=proj,
+        path_gomc_runs=Path("GOMC"),
+        path_gomc_template=tpl.relative_to(proj),
+        namd_box_0_dir=namd0,
+        namd_box_1_dir=None,
+        previous_gomc_dir=prev_gomc,
+    )
+
+    out_dir = write_gomc_conf_file(
+        cfg,
+        io,
+        run_no=3,
+        sim=GOMCSimParams(
+            1000,
+            100,
+            50,
+            25,
+            300.0,
+            1.0,
+        ),
+        starts=starts,
+    )
+    conf = (out_dir / "in.conf").read_text()
+
+    expected_coor = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.coor",
+        out_dir,
+    )
+    expected_xsc = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.xsc",
+        out_dir,
+    )
+    expected_pdb = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.pdb",
+        out_dir,
+    )
+    expected_psf = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.psf",
+        out_dir,
+    )
+
+    assert f"binCoordinates 1 {expected_coor}" in conf
+    assert f"extendedSystem 1 {expected_xsc}" in conf
+
+    assert "binVelocities 1" not in conf
+    assert "Output_data_BOX_1_restart.vel" not in conf
+
+    assert f"Coordinates 1 {expected_pdb}" in conf
+    assert f"Structure 1 {expected_psf}" in conf
+
+    assert "Restart true" in conf
+
+def test_first_cycle_two_box_gemc_uses_starting_box1_pdb_psf(
+    tmp_path: Path,
+):
+    proj = tmp_path / "proj"
+    tpl = proj / "templates" / "gomc.tpl"
+    _write_restart_routing_template(tpl)
+
+    namd0 = _prepare_namd_restart_dir(
+        proj,
+        "0000000000_a",
+        (13.0, 23.0, 33.0),
+    )
+    namd1 = _prepare_namd_restart_dir(
+        proj,
+        "0000000000_b",
+        (14.0, 24.0, 34.0),
+    )
+    starts = _prepare_restart_routing_inputs(proj)
+
+    cfg = _make_cfg(
+        simulation_type="GEMC",
+        only_use_box_0_for_namd_for_gemc=False,
+    )
+    io = GOMCIOPaths(
+        python_file_directory=proj,
+        path_gomc_runs=Path("GOMC"),
+        path_gomc_template=tpl.relative_to(proj),
+        namd_box_0_dir=namd0,
+        namd_box_1_dir=namd1,
+        previous_gomc_dir=None,
+    )
+
+    out_dir = write_gomc_conf_file(
+        cfg,
+        io,
+        run_no=1,
+        sim=GOMCSimParams(
+            1000,
+            100,
+            50,
+            25,
+            300.0,
+            1.0,
+        ),
+        starts=starts,
+    )
+    conf = (out_dir / "in.conf").read_text()
+
+    expected_pdb1 = _rel(
+        proj / "inputs" / "b1.pdb",
+        out_dir,
+    )
+    expected_psf1 = _rel(
+        proj / "inputs" / "b1.psf",
+        out_dir,
+    )
+
+    assert "binCoordinates 0" in conf
+    assert (
+        "NAMD/0000000000_a/namdOut.restart.coor"
+        in conf
+    )
+
+    assert "binCoordinates 1" in conf
+    assert (
+        "NAMD/0000000000_b/namdOut.restart.coor"
+        in conf
+    )
+    assert (
+        "NAMD/0000000000_b/namdOut.restart.xsc"
+        in conf
+    )
+    assert (
+        "NAMD/0000000000_b/namdOut.restart.vel"
+        in conf
+    )
+
+    assert f"Coordinates 1 {expected_pdb1}" in conf
+    assert f"Structure 1 {expected_psf1}" in conf
+
+    assert "Restart true" in conf
+
+def test_subsequent_two_box_gemc_uses_previous_gomc_box1_pdb_psf(
+    tmp_path: Path,
+):
+    proj = tmp_path / "proj"
+    tpl = proj / "templates" / "gomc.tpl"
+    _write_restart_routing_template(tpl)
+
+    namd0 = _prepare_namd_restart_dir(
+        proj,
+        "0000000002_a",
+        (15.0, 25.0, 35.0),
+    )
+    namd1 = _prepare_namd_restart_dir(
+        proj,
+        "0000000002_b",
+        (16.0, 26.0, 36.0),
+    )
+    starts = _prepare_restart_routing_inputs(proj)
+
+    prev_gomc = proj / "GOMC" / "0000000001"
+    prev_gomc.mkdir(parents=True)
+
+    (
+        prev_gomc
+        / "Output_data_BOX_0_restart.pdb"
+    ).write_text(
+        _pdb_cryst1(15, 25, 35)
+    )
+    (
+        prev_gomc
+        / "Output_data_BOX_0_restart.psf"
+    ).write_text("psf0")
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.pdb"
+    ).write_text(
+        _pdb_cryst1(16, 26, 36)
+    )
+    (
+        prev_gomc
+        / "Output_data_BOX_1_restart.psf"
+    ).write_text("psf1")
+    (
+        prev_gomc
+        / "Output_data_restart.chk"
+    ).write_text("chk")
+
+    cfg = _make_cfg(
+        simulation_type="GEMC",
+        only_use_box_0_for_namd_for_gemc=False,
+    )
+    io = GOMCIOPaths(
+        python_file_directory=proj,
+        path_gomc_runs=Path("GOMC"),
+        path_gomc_template=tpl.relative_to(proj),
+        namd_box_0_dir=namd0,
+        namd_box_1_dir=namd1,
+        previous_gomc_dir=prev_gomc,
+    )
+
+    out_dir = write_gomc_conf_file(
+        cfg,
+        io,
+        run_no=3,
+        sim=GOMCSimParams(
+            1000,
+            100,
+            50,
+            25,
+            300.0,
+            1.0,
+        ),
+        starts=starts,
+    )
+    conf = (out_dir / "in.conf").read_text()
+
+    expected_pdb1 = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.pdb",
+        out_dir,
+    )
+    expected_psf1 = _rel(
+        prev_gomc / "Output_data_BOX_1_restart.psf",
+        out_dir,
+    )
+
+    assert (
+        "NAMD/0000000002_b/namdOut.restart.coor"
+        in conf
+    )
+    assert (
+        "NAMD/0000000002_b/namdOut.restart.xsc"
+        in conf
+    )
+    assert (
+        "NAMD/0000000002_b/namdOut.restart.vel"
+        in conf
+    )
+
+    assert f"Coordinates 1 {expected_pdb1}" in conf
+    assert f"Structure 1 {expected_psf1}" in conf
+
+    assert "inputs/b1.pdb" not in conf
+    assert "inputs/b1.psf" not in conf
+
+    assert "Restart true" in conf

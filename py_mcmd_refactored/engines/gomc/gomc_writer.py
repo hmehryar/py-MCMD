@@ -82,13 +82,115 @@ def _build_parameters_block(
     return "".join(lines)
 
 
+# def _strip_box1_binary_restart_lines(template_text: str) -> str:
+#     out = []
+#     for line in template_text.splitlines(keepends=True):
+#         toks = line.split()
+#         if len(toks) >= 2 and toks[0] in {"binCoordinates", "extendedSystem", "binVelocities"} and toks[1] == "1":
+#             continue
+#         out.append(line)
+#     return "".join(out)
 def _strip_box1_binary_restart_lines(template_text: str) -> str:
+    """Remove all box-1 directives when box 1 is not used."""
     out = []
     for line in template_text.splitlines(keepends=True):
         toks = line.split()
-        if len(toks) >= 2 and toks[0] in {"binCoordinates", "extendedSystem", "binVelocities"} and toks[1] == "1":
+        if not toks:
+            out.append(line)
             continue
+
+        if (
+            len(toks) >= 2
+            and toks[0] in {
+                "binCoordinates",
+                "extendedSystem",
+                "binVelocities",
+            }
+            and toks[1] == "1"
+        ):
+            continue
+
+        if (
+            len(toks) >= 2
+            and toks[0] in {"Coordinates", "Structure"}
+            and toks[1] == "1"
+        ):
+            continue
+
+        if (
+            len(toks) >= 2
+            and toks[0] in {
+                "CellBasisVector1",
+                "CellBasisVector2",
+                "CellBasisVector3",
+            }
+            and toks[1] == "1"
+        ):
+            continue
+
         out.append(line)
+
+    return "".join(out)
+
+
+def _strip_box0_binary_restart_lines(template_text: str) -> str:
+    """Remove box-0 binary restart directives while retaining PDB/PSF lines."""
+    out = []
+    for line in template_text.splitlines(keepends=True):
+        toks = line.split()
+        if (
+            len(toks) >= 2
+            and toks[0] in {
+                "binCoordinates",
+                "extendedSystem",
+                "binVelocities",
+            }
+            and toks[1] == "0"
+        ):
+            continue
+
+        out.append(line)
+
+    return "".join(out)
+
+
+def _strip_all_binary_restart_lines(template_text: str) -> str:
+    """Remove binary restart directives for both boxes while keeping PDB/PSF lines."""
+    out = _strip_box0_binary_restart_lines(template_text)
+    kept_lines = []
+
+    for line in out.splitlines(keepends=True):
+        toks = line.split()
+        if (
+            len(toks) >= 2
+            and toks[0] in {
+                "binCoordinates",
+                "extendedSystem",
+                "binVelocities",
+            }
+            and toks[1] == "1"
+        ):
+            continue
+
+        kept_lines.append(line)
+
+    return "".join(kept_lines)
+
+
+def _strip_box1_velocity_restart_line(template_text: str) -> str:
+    """Remove the box-1 binary velocity directive while retaining other restart data."""
+    out = []
+    for line in template_text.splitlines(keepends=True):
+        toks = line.split()
+        if (
+            len(toks) >= 2
+            and toks[0] == "binVelocities"
+            and toks[1] == "1"
+        ):
+            continue
+
+        out.append(line)
+
     return "".join(out)
 
 
@@ -204,47 +306,216 @@ def write_gomc_conf_file(
     out = out.replace("y_dim_box_0", str(ly0))
     out = out.replace("z_dim_box_0", str(lz0))
 
+    # # Box 1 branches
+    # if cfg.simulation_type in {"GEMC", "GCMC"}:
+    #     if (cfg.simulation_type == "GCMC") or (cfg.simulation_type == "GEMC" and cfg.only_use_box_0_for_namd_for_gemc):
+    #         if io.previous_gomc_dir is None:
+    #             out = _strip_box1_binary_restart_lines(out)
+    #             pdb1_rel = _rel(python_dir / starts.starting_pdb_box_1_file, gomc_newdir)
+    #             psf1_rel = _rel(python_dir / starts.starting_psf_box_1_file, gomc_newdir)
+    #             out = out.replace("pdb_file_box_1_file", pdb1_rel)
+    #             out = out.replace("psf_file_box_1_file", psf1_rel)
+
+    #             a1, b1, c1 = _read_pdb_cryst1_dims(python_dir / starts.starting_pdb_box_1_file)
+    #             set_dims = getattr(cfg, "set_dims_box_1_list", [None, None, None]) or [None, None, None]
+    #             x1 = _override_dim(a1, set_dims[0])
+    #             y1 = _override_dim(b1, set_dims[1])
+    #             z1 = _override_dim(c1, set_dims[2])
+    #             out = out.replace("x_dim_box_1", str(x1))
+    #             out = out.replace("y_dim_box_1", str(y1))
+    #             out = out.replace("z_dim_box_1", str(z1))
+    #         else:
+    #             prev_gomc_rel = _rel(io.previous_gomc_dir, gomc_newdir)
+    #             out = out.replace("coor_box_1_file", f"{prev_gomc_rel}/Output_data_BOX_1_restart.coor")
+    #             out = out.replace("xsc_box_1_file",  f"{prev_gomc_rel}/Output_data_BOX_1_restart.xsc")
+    #             out = out.replace("vel_box_1_file",  f"{prev_gomc_rel}/Output_data_BOX_1_restart.vel")
+
+    #             xsc1_prev = io.previous_gomc_dir / "Output_data_BOX_1_restart.xsc"
+    #             lx1, ly1, lz1 = _read_last_xsc_dims(xsc1_prev)
+    #             out = out.replace("x_dim_box_1", str(lx1))
+    #             out = out.replace("y_dim_box_1", str(ly1))
+    #             out = out.replace("z_dim_box_1", str(lz1))
+    #     else:
+    #         assert io.namd_box_1_dir is not None, "namd_box_1_dir is required for GEMC with both boxes."
+    #         prev_namd1_rel = _rel(io.namd_box_1_dir, gomc_newdir)
+    #         out = out.replace("coor_box_1_file", f"{prev_namd1_rel}/namdOut.restart.coor")
+    #         out = out.replace("xsc_box_1_file",  f"{prev_namd1_rel}/namdOut.restart.xsc")
+    #         out = out.replace("vel_box_1_file",  f"{prev_namd1_rel}/namdOut.restart.vel")
+    #         xsc1 = io.namd_box_1_dir / "namdOut.restart.xsc"
+    #         lx1, ly1, lz1 = _read_last_xsc_dims(xsc1)
+    #         out = out.replace("x_dim_box_1", str(lx1))
+    #         out = out.replace("y_dim_box_1", str(ly1))
+    #         out = out.replace("z_dim_box_1", str(lz1))
+    
     # Box 1 branches
     if cfg.simulation_type in {"GEMC", "GCMC"}:
-        if (cfg.simulation_type == "GCMC") or (cfg.simulation_type == "GEMC" and cfg.only_use_box_0_for_namd_for_gemc):
+        if (cfg.simulation_type == "GCMC") or (
+            cfg.simulation_type == "GEMC"
+            and cfg.only_use_box_0_for_namd_for_gemc
+        ):
             if io.previous_gomc_dir is None:
-                out = _strip_box1_binary_restart_lines(out)
-                pdb1_rel = _rel(python_dir / starts.starting_pdb_box_1_file, gomc_newdir)
-                psf1_rel = _rel(python_dir / starts.starting_psf_box_1_file, gomc_newdir)
-                out = out.replace("pdb_file_box_1_file", pdb1_rel)
-                out = out.replace("psf_file_box_1_file", psf1_rel)
+                # First-cycle GCMC and one-box GEMC use PDB/PSF inputs and
+                # Restart=false, so no binary restart directives are valid.
+                out = _strip_all_binary_restart_lines(out)
 
-                a1, b1, c1 = _read_pdb_cryst1_dims(python_dir / starts.starting_pdb_box_1_file)
-                set_dims = getattr(cfg, "set_dims_box_1_list", [None, None, None]) or [None, None, None]
+                pdb1_rel = _rel(
+                    python_dir / starts.starting_pdb_box_1_file,
+                    gomc_newdir,
+                )
+                psf1_rel = _rel(
+                    python_dir / starts.starting_psf_box_1_file,
+                    gomc_newdir,
+                )
+                out = out.replace(
+                    "pdb_file_box_1_file",
+                    pdb1_rel,
+                )
+                out = out.replace(
+                    "psf_file_box_1_file",
+                    psf1_rel,
+                )
+
+                a1, b1, c1 = _read_pdb_cryst1_dims(
+                    python_dir / starts.starting_pdb_box_1_file
+                )
+                set_dims = (
+                    getattr(
+                        cfg,
+                        "set_dims_box_1_list",
+                        [None, None, None],
+                    )
+                    or [None, None, None]
+                )
                 x1 = _override_dim(a1, set_dims[0])
                 y1 = _override_dim(b1, set_dims[1])
                 z1 = _override_dim(c1, set_dims[2])
                 out = out.replace("x_dim_box_1", str(x1))
                 out = out.replace("y_dim_box_1", str(y1))
                 out = out.replace("z_dim_box_1", str(z1))
-            else:
-                prev_gomc_rel = _rel(io.previous_gomc_dir, gomc_newdir)
-                out = out.replace("coor_box_1_file", f"{prev_gomc_rel}/Output_data_BOX_1_restart.coor")
-                out = out.replace("xsc_box_1_file",  f"{prev_gomc_rel}/Output_data_BOX_1_restart.xsc")
-                out = out.replace("vel_box_1_file",  f"{prev_gomc_rel}/Output_data_BOX_1_restart.vel")
 
-                xsc1_prev = io.previous_gomc_dir / "Output_data_BOX_1_restart.xsc"
-                lx1, ly1, lz1 = _read_last_xsc_dims(xsc1_prev)
+            else:
+                # GCMC and one-box GEMC do not provide box-1 velocity
+                # restart data. Reuse the previous GOMC coordinate,
+                # extended-system, PDB, and PSF restart files instead.
+                prev_gomc_rel = _rel(
+                    io.previous_gomc_dir,
+                    gomc_newdir,
+                )
+                out = out.replace(
+                    "coor_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.coor"
+                    ),
+                )
+                out = out.replace(
+                    "xsc_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.xsc"
+                    ),
+                )
+
+                out = _strip_box1_velocity_restart_line(out)
+
+                out = out.replace(
+                    "pdb_file_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.pdb"
+                    ),
+                )
+                out = out.replace(
+                    "psf_file_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.psf"
+                    ),
+                )
+
+                xsc1_prev = (
+                    io.previous_gomc_dir
+                    / "Output_data_BOX_1_restart.xsc"
+                )
+                lx1, ly1, lz1 = _read_last_xsc_dims(
+                    xsc1_prev
+                )
                 out = out.replace("x_dim_box_1", str(lx1))
                 out = out.replace("y_dim_box_1", str(ly1))
                 out = out.replace("z_dim_box_1", str(lz1))
+
         else:
-            assert io.namd_box_1_dir is not None, "namd_box_1_dir is required for GEMC with both boxes."
-            prev_namd1_rel = _rel(io.namd_box_1_dir, gomc_newdir)
-            out = out.replace("coor_box_1_file", f"{prev_namd1_rel}/namdOut.restart.coor")
-            out = out.replace("xsc_box_1_file",  f"{prev_namd1_rel}/namdOut.restart.xsc")
-            out = out.replace("vel_box_1_file",  f"{prev_namd1_rel}/namdOut.restart.vel")
-            xsc1 = io.namd_box_1_dir / "namdOut.restart.xsc"
+            # Two-box GEMC receives binary restart data from both NAMD boxes.
+            assert io.namd_box_1_dir is not None, (
+                "namd_box_1_dir is required for GEMC with both boxes."
+            )
+
+            prev_namd1_rel = _rel(
+                io.namd_box_1_dir,
+                gomc_newdir,
+            )
+            out = out.replace(
+                "coor_box_1_file",
+                f"{prev_namd1_rel}/namdOut.restart.coor",
+            )
+            out = out.replace(
+                "xsc_box_1_file",
+                f"{prev_namd1_rel}/namdOut.restart.xsc",
+            )
+            out = out.replace(
+                "vel_box_1_file",
+                f"{prev_namd1_rel}/namdOut.restart.vel",
+            )
+
+            xsc1 = (
+                io.namd_box_1_dir
+                / "namdOut.restart.xsc"
+            )
             lx1, ly1, lz1 = _read_last_xsc_dims(xsc1)
             out = out.replace("x_dim_box_1", str(lx1))
             out = out.replace("y_dim_box_1", str(ly1))
             out = out.replace("z_dim_box_1", str(lz1))
 
+            if io.previous_gomc_dir is None:
+                pdb1_rel = _rel(
+                    python_dir / starts.starting_pdb_box_1_file,
+                    gomc_newdir,
+                )
+                psf1_rel = _rel(
+                    python_dir / starts.starting_psf_box_1_file,
+                    gomc_newdir,
+                )
+                out = out.replace(
+                    "pdb_file_box_1_file",
+                    pdb1_rel,
+                )
+                out = out.replace(
+                    "psf_file_box_1_file",
+                    psf1_rel,
+                )
+
+            else:
+                prev_gomc_rel = _rel(
+                    io.previous_gomc_dir,
+                    gomc_newdir,
+                )
+                out = out.replace(
+                    "pdb_file_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.pdb"
+                    ),
+                )
+                out = out.replace(
+                    "psf_file_box_1_file",
+                    (
+                        f"{prev_gomc_rel}/"
+                        "Output_data_BOX_1_restart.psf"
+                    ),
+                )
+
+    else:
+        out = _strip_box1_binary_restart_lines(out)
     # restart_true_or_false
     if cfg.simulation_type in {"GEMC", "GCMC"}:
         if (cfg.simulation_type == "GCMC" and io.previous_gomc_dir is None) or \
