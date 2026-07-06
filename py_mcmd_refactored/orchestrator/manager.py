@@ -14,7 +14,8 @@ from .state import RunState, PmeDims
 from engines.base import Engine
 from engines.gomc_engine import GomcEngine
 from engines.namd_engine import NamdEngine
-from utils.fifo_store import FifoStore,FifoStepResources
+from utils.fifo_store import FifoStore, FifoStepResources
+from utils.onthefly_processor import OnTheFlyProcessor
 
 _FIFO_OUTPUT_BASENAMES_BY_ENGINE = {
     # These are the outputs currently routed through the centralized runner.
@@ -25,6 +26,7 @@ _FIFO_OUTPUT_BASENAMES_BY_ENGINE = {
 }
 
 import time
+import threading
 import inspect
 
 
@@ -37,7 +39,18 @@ except Exception:  # pragma: no cover
 class SimulationOrchestrator:
 
     logger = logging.getLogger(__name__)
+    """
+        disk_cleanup_mode
+        otf_keep_raw_cycles
 
+        _retained_cycle_pairs
+
+        _bg_thread
+        _bg_error
+        _bg_cycle_pair
+
+        _otf_processor
+    """
     def __init__(self, cfg: SimulationConfig, dry_run: bool = False):
         self.cfg = cfg
         # Central mutable state for the legacy run_no loop
@@ -59,10 +72,65 @@ class SimulationOrchestrator:
             developer_mode=self.developer_mode,
             logger=self.logger,
         )
+        # self._last_successful_fifo_step_by_engine = {
+        #     "NAMD": None,
+        #     "GOMC": None,
+        # }
+
+        # self.namd = NamdEngine(cfg, "NAMD", dry_run=dry_run)
         self._last_successful_fifo_step_by_engine = {
             "NAMD": None,
             "GOMC": None,
         }
+
+        self.disk_cleanup_mode = str(
+            getattr(cfg, "disk_cleanup_mode", "compact")
+        ).strip().lower()
+
+        self.otf_keep_raw_cycles = int(
+            getattr(cfg, "otf_keep_raw_cycles", 2)
+        )
+
+        self._retained_cycle_pairs: list[
+            tuple[str, str]
+        ] = []
+
+        self._bg_thread: threading.Thread | None = None
+        self._bg_error: Exception | None = None
+        self._bg_cycle_pair: tuple[int, int] | None = None
+
+        self._otf_processor = None
+
+        if bool(
+            getattr(
+                cfg,
+                "process_on_the_fly",
+                False,
+            )
+        ):
+            self._otf_processor = OnTheFlyProcessor(
+                cfg,
+                getattr(
+                    cfg,
+                    "combined_data_dir",
+                    "combined_data",
+                ),
+                managed_root=getattr(
+                    self.fifo_store,
+                    "managed_root",
+                    None,
+                ),
+            )
+
+            self.logger.info(
+                "[OTF] On-the-fly processing enabled. "
+                "Combined output: %s",
+                getattr(
+                    cfg,
+                    "combined_data_dir",
+                    "combined_data",
+                ),
+            )
 
         self.namd = NamdEngine(cfg, "NAMD", dry_run=dry_run)
         self.gomc = GomcEngine(cfg, "GOMC", dry_run=dry_run)
@@ -224,37 +292,204 @@ class SimulationOrchestrator:
         self.gomc_root = gomc_root
 
 
+    # def run(self):
+    #     self.logger.info("Starting coupled NAMD↔GOMC simulation")
+
+    #     if int(self.cfg.starting_at_cycle_namd_gomc_sims) > 0:
+    #         if compute_start_context is not None and apply_start_context is not None:
+    #             ctx = compute_start_context(self.cfg, id_width=10)
+    #             apply_start_context(self.state, ctx)
+    #         else:
+    #             self.state.current_step = (
+    #                 (int(self.cfg.namd_run_steps) + int(self.cfg.gomc_run_steps))
+    #                 * int(self.cfg.starting_at_cycle_namd_gomc_sims)
+    #                 + int(self.cfg.namd_minimize_steps)
+    #             )
+
+    #         if hasattr(self, "refresh_pme_dims_from_run0"):
+    #             try:
+    #                 self.refresh_pme_dims_from_run0()
+    #             except Exception as e:
+    #                 self.logger.warning("[PME] refresh_pme_dims_from_run0 failed: %s", e)
+
+    #     starting_sims = int(self.cfg.starting_sims_namd_gomc)
+    #     total_sims = int(self.cfg.total_sims_namd_gomc)
+
+    #     cycles_completed = 0
+    #     cycle_start_perf = None
+    #     self._time_stats_lines = []
+
+    #     summary = None
+
+    #     try:
+    #         for run_no in range(starting_sims, total_sims):
+    #             self.logger.info(
+    #                 "*************************************************\n"
+    #                 "*************************************************\n"
+    #                 "run_no = %s (START)\n"
+    #                 "*************************************************",
+    #                 run_no,
+    #             )
+
+    #             if run_no % 2 == 0:
+    #                 cycle_start_perf = time.perf_counter()
+    #                 engine_name = "NAMD"
+    #             else:
+    #                 engine_name = "GOMC"
+
+    #             fifo_resources = self._prepare_fifo_step(engine_name, run_no)
+
+    #             try:
+    #                 if run_no % 2 == 0:
+    #                     self._call_run_segment(
+    #                         self.namd,
+    #                         run_no=run_no,
+    #                         fifo_resources=fifo_resources,
+    #                     )
+    #                 else:
+    #                     self._call_run_segment(
+    #                         self.gomc,
+    #                         run_no=run_no,
+    #                         fifo_resources=fifo_resources,
+    #                     )
+    #                     cycles_completed += 1
+
+    #                 self._mark_fifo_step_success(engine_name, run_no)
+
+    #             except Exception:
+    #                 self._mark_fifo_step_failure(engine_name, run_no)
+    #                 raise
+
+    #             if run_no % 2 == 1:
+    #                 cycle_end_perf = time.perf_counter()
+    #                 if cycle_start_perf is None:
+    #                     cycle_start_perf = cycle_end_perf
+
+    #                 cycle_run_time_s = round(cycle_end_perf - cycle_start_perf, 6)
+
+    #                 max_namd = float(self.state.timings.max_namd_cycle_time_s or 0.0)
+    #                 gomc_t = float(self.state.timings.gomc_cycle_time_s or 0.0)
+    #                 python_only_time_s = round(cycle_run_time_s - (max_namd + gomc_t), 6)
+
+    #                 if run_no == starting_sims + 1:
+    #                     header = (
+    #                         "*************************************************\n"
+    #                         "TIME_STATS_TITLE:\t#Cycle_No\t\tNAMD_time_s\t\t"
+    #                         "GOMC_time_s\t\tPython_time_s\t\tTotal_time_s\n"
+    #                     )
+    #                     self._time_stats_lines.append(header)
+    #                     self.logger.info(header.rstrip("\n"))
+
+    #                 cycle_no = int(run_no / 2)
+    #                 data = (
+    #                     f"TIME_STATS_DATA:\t{cycle_no}\t\t{max_namd}\t\t{gomc_t}\t\t"
+    #                     f"{python_only_time_s}\t\t{cycle_run_time_s}\n"
+    #                 )
+    #                 self._time_stats_lines.append(data)
+    #                 self.logger.info(data.rstrip("\n"))
+
+    #             self.logger.info(
+    #                 "*************************************************\n"
+    #                 "run_no = %s (End)\n"
+    #                 "*************************************************",
+    #                 run_no,
+    #             )
+
+    #         self.logger.info("All cycles completed.")
+
+    #         summary = {
+    #             "total_cycles": self.total_cycles,
+    #             "start_cycle": self.start_cycle,
+    #             "namd_steps": self.namd_steps,
+    #             "gomc_steps": self.gomc_steps,
+    #             "cycles_completed": cycles_completed,
+    #             "total_sims_namd_gomc": self.total_sims_namd_gomc,
+    #             "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
+    #             "state": self.state.snapshot(),
+    #             "time_stats_lines": self._time_stats_lines,
+    #         }
+    #         self._emit_end_header()
+    #         return summary
+
+    #     finally:
+    #         # Graceful teardown on success, failure, or early exit.
+    #         self.fifo_store.cleanup_all()
+
     def run(self):
-        self.logger.info("Starting coupled NAMD↔GOMC simulation")
+        self.logger.info(
+            "Starting coupled NAMD↔GOMC simulation"
+        )
 
-        if int(self.cfg.starting_at_cycle_namd_gomc_sims) > 0:
-            if compute_start_context is not None and apply_start_context is not None:
-                ctx = compute_start_context(self.cfg, id_width=10)
-                apply_start_context(self.state, ctx)
-            else:
-                self.state.current_step = (
-                    (int(self.cfg.namd_run_steps) + int(self.cfg.gomc_run_steps))
-                    * int(self.cfg.starting_at_cycle_namd_gomc_sims)
-                    + int(self.cfg.namd_minimize_steps)
-                )
-
-            if hasattr(self, "refresh_pme_dims_from_run0"):
-                try:
-                    self.refresh_pme_dims_from_run0()
-                except Exception as e:
-                    self.logger.warning("[PME] refresh_pme_dims_from_run0 failed: %s", e)
-
-        starting_sims = int(self.cfg.starting_sims_namd_gomc)
-        total_sims = int(self.cfg.total_sims_namd_gomc)
-
-        cycles_completed = 0
-        cycle_start_perf = None
-        self._time_stats_lines = []
-
-        summary = None
+        run_succeeded = False
 
         try:
-            for run_no in range(starting_sims, total_sims):
+            if (
+                int(
+                    self.cfg.starting_at_cycle_namd_gomc_sims
+                )
+                > 0
+            ):
+                if (
+                    compute_start_context is not None
+                    and apply_start_context is not None
+                ):
+                    ctx = compute_start_context(
+                        self.cfg,
+                        id_width=10,
+                    )
+                    apply_start_context(
+                        self.state,
+                        ctx,
+                    )
+
+                else:
+                    self.state.current_step = (
+                        (
+                            int(self.cfg.namd_run_steps)
+                            + int(self.cfg.gomc_run_steps)
+                        )
+                        * int(
+                            self.cfg
+                            .starting_at_cycle_namd_gomc_sims
+                        )
+                        + int(self.cfg.namd_minimize_steps)
+                    )
+
+                if self._otf_processor is not None:
+                    self._otf_processor.set_current_step(
+                        self.state.current_step
+                    )
+
+                if hasattr(
+                    self,
+                    "refresh_pme_dims_from_run0",
+                ):
+                    try:
+                        self.refresh_pme_dims_from_run0()
+
+                    except Exception as e:
+                        self.logger.warning(
+                            "[PME] "
+                            "refresh_pme_dims_from_run0 "
+                            "failed: %s",
+                            e,
+                        )
+
+            starting_sims = int(
+                self.cfg.starting_sims_namd_gomc
+            )
+            total_sims = int(
+                self.cfg.total_sims_namd_gomc
+            )
+
+            cycles_completed = 0
+            cycle_start_perf = None
+            self._time_stats_lines = []
+
+            for run_no in range(
+                starting_sims,
+                total_sims,
+            ):
                 self.logger.info(
                     "*************************************************\n"
                     "*************************************************\n"
@@ -264,12 +499,20 @@ class SimulationOrchestrator:
                 )
 
                 if run_no % 2 == 0:
-                    cycle_start_perf = time.perf_counter()
+                    cycle_start_perf = (
+                        time.perf_counter()
+                    )
                     engine_name = "NAMD"
+
                 else:
                     engine_name = "GOMC"
 
-                fifo_resources = self._prepare_fifo_step(engine_name, run_no)
+                fifo_resources = (
+                    self._prepare_fifo_step(
+                        engine_name,
+                        run_no,
+                    )
+                )
 
                 try:
                     if run_no % 2 == 0:
@@ -278,47 +521,118 @@ class SimulationOrchestrator:
                             run_no=run_no,
                             fifo_resources=fifo_resources,
                         )
+
                     else:
                         self._call_run_segment(
                             self.gomc,
                             run_no=run_no,
                             fifo_resources=fifo_resources,
                         )
+
                         cycles_completed += 1
 
-                    self._mark_fifo_step_success(engine_name, run_no)
+                    self._mark_fifo_step_success(
+                        engine_name,
+                        run_no,
+                    )
 
                 except Exception:
-                    self._mark_fifo_step_failure(engine_name, run_no)
+                    self._mark_fifo_step_failure(
+                        engine_name,
+                        run_no,
+                    )
                     raise
 
                 if run_no % 2 == 1:
-                    cycle_end_perf = time.perf_counter()
+                    namd_run_no = run_no - 1
+                    gomc_run_no = run_no
+
+                    if self._otf_processor is not None:
+                        self._submit_otf_cycle(
+                            namd_run_no,
+                            gomc_run_no,
+                        )
+
+                    else:
+                        self._record_completed_cycle_pair(
+                            namd_run_no,
+                            gomc_run_no,
+                        )
+                        self._apply_retention_policy()
+
+                    cycle_end_perf = (
+                        time.perf_counter()
+                    )
+
                     if cycle_start_perf is None:
-                        cycle_start_perf = cycle_end_perf
+                        cycle_start_perf = (
+                            cycle_end_perf
+                        )
 
-                    cycle_run_time_s = round(cycle_end_perf - cycle_start_perf, 6)
+                    cycle_run_time_s = round(
+                        cycle_end_perf
+                        - cycle_start_perf,
+                        6,
+                    )
 
-                    max_namd = float(self.state.timings.max_namd_cycle_time_s or 0.0)
-                    gomc_t = float(self.state.timings.gomc_cycle_time_s or 0.0)
-                    python_only_time_s = round(cycle_run_time_s - (max_namd + gomc_t), 6)
+                    max_namd = float(
+                        self.state.timings
+                        .max_namd_cycle_time_s
+                        or 0.0
+                    )
+
+                    gomc_t = float(
+                        self.state.timings
+                        .gomc_cycle_time_s
+                        or 0.0
+                    )
+
+                    python_only_time_s = round(
+                        cycle_run_time_s
+                        - (
+                            max_namd
+                            + gomc_t
+                        ),
+                        6,
+                    )
 
                     if run_no == starting_sims + 1:
                         header = (
                             "*************************************************\n"
-                            "TIME_STATS_TITLE:\t#Cycle_No\t\tNAMD_time_s\t\t"
-                            "GOMC_time_s\t\tPython_time_s\t\tTotal_time_s\n"
+                            "TIME_STATS_TITLE:\t"
+                            "#Cycle_No\t\t"
+                            "NAMD_time_s\t\t"
+                            "GOMC_time_s\t\t"
+                            "Python_time_s\t\t"
+                            "Total_time_s\n"
                         )
-                        self._time_stats_lines.append(header)
-                        self.logger.info(header.rstrip("\n"))
+
+                        self._time_stats_lines.append(
+                            header
+                        )
+
+                        self.logger.info(
+                            header.rstrip("\n")
+                        )
 
                     cycle_no = int(run_no / 2)
+
                     data = (
-                        f"TIME_STATS_DATA:\t{cycle_no}\t\t{max_namd}\t\t{gomc_t}\t\t"
-                        f"{python_only_time_s}\t\t{cycle_run_time_s}\n"
+                        f"TIME_STATS_DATA:\t"
+                        f"{cycle_no}\t\t"
+                        f"{max_namd}\t\t"
+                        f"{gomc_t}\t\t"
+                        f"{python_only_time_s}\t\t"
+                        f"{cycle_run_time_s}\n"
                     )
-                    self._time_stats_lines.append(data)
-                    self.logger.info(data.rstrip("\n"))
+
+                    self._time_stats_lines.append(
+                        data
+                    )
+
+                    self.logger.info(
+                        data.rstrip("\n")
+                    )
 
                 self.logger.info(
                     "*************************************************\n"
@@ -327,7 +641,11 @@ class SimulationOrchestrator:
                     run_no,
                 )
 
-            self.logger.info("All cycles completed.")
+            self._wait_for_otf_worker()
+
+            self.logger.info(
+                "All cycles completed."
+            )
 
             summary = {
                 "total_cycles": self.total_cycles,
@@ -335,17 +653,45 @@ class SimulationOrchestrator:
                 "namd_steps": self.namd_steps,
                 "gomc_steps": self.gomc_steps,
                 "cycles_completed": cycles_completed,
-                "total_sims_namd_gomc": self.total_sims_namd_gomc,
-                "starting_sims_namd_gomc": self.starting_sims_namd_gomc,
+                "total_sims_namd_gomc": (
+                    self.total_sims_namd_gomc
+                ),
+                "starting_sims_namd_gomc": (
+                    self.starting_sims_namd_gomc
+                ),
                 "state": self.state.snapshot(),
-                "time_stats_lines": self._time_stats_lines,
+                "time_stats_lines": (
+                    self._time_stats_lines
+                ),
             }
+
             self._emit_end_header()
+
+            run_succeeded = True
+
             return summary
 
         finally:
-            # Graceful teardown on success, failure, or early exit.
-            self.fifo_store.cleanup_all()
+            if self._bg_thread is not None:
+                self._join_otf_worker_for_teardown()
+
+            if self._otf_processor is not None:
+                self._otf_processor.close()
+
+            if run_succeeded:
+                self._finalize_successful_artifact_cleanup()
+
+            else:
+                self.logger.warning(
+                    "[Cleanup] Run did not finish successfully; "
+                    "preserving managed runtime artifacts for "
+                    "debugging at %s",
+                    getattr(
+                        self.fifo_store,
+                        "managed_root",
+                        "<managed runtime>",
+                    ),
+                )
 
     def refresh_pme_dims_from_run0(self) -> None:
         """Load NAMD Run-0 PME grid dims into orchestrator state.
@@ -378,18 +724,206 @@ class SimulationOrchestrator:
     def _prepare_fifo_step(self, engine: str, run_no: int) -> FifoStepResources:
         return self.fifo_store.prepare_step(engine, self._fifo_step_id(run_no))
 
-    def _mark_fifo_step_success(self, engine: str, run_no: int) -> None:
+    # def _mark_fifo_step_success(self, engine: str, run_no: int) -> None:
+    #     step_id = self._fifo_step_id(run_no)
+    #     previous_step_id = self._last_successful_fifo_step_by_engine.get(engine)
+
+    #     self.fifo_store.finalize_step_success(engine, step_id)
+
+    #     # Retention policy: keep only the most recent successful step per engine.
+    #     if previous_step_id is not None and previous_step_id != step_id:
+    #         self.fifo_store.cleanup_step(engine, previous_step_id)
+
+    #     self._last_successful_fifo_step_by_engine[engine] = step_id
+    def _mark_fifo_step_success(
+        self,
+        engine: str,
+        run_no: int,
+    ) -> None:
         step_id = self._fifo_step_id(run_no)
-        previous_step_id = self._last_successful_fifo_step_by_engine.get(engine)
 
-        self.fifo_store.finalize_step_success(engine, step_id)
+        self.fifo_store.finalize_step_success(
+            engine,
+            step_id,
+        )
 
-        # Retention policy: keep only the most recent successful step per engine.
-        if previous_step_id is not None and previous_step_id != step_id:
-            self.fifo_store.cleanup_step(engine, previous_step_id)
+        self._last_successful_fifo_step_by_engine[
+            engine
+        ] = step_id
 
-        self._last_successful_fifo_step_by_engine[engine] = step_id
+    def _submit_otf_cycle(
+        self,
+        namd_run_no: int,
+        gomc_run_no: int,
+    ) -> None:
+        self._wait_for_otf_worker()
 
+        processor = self._otf_processor
+
+        if processor is None:
+            return
+
+        self._bg_error = None
+        self._bg_cycle_pair = (
+            int(namd_run_no),
+            int(gomc_run_no),
+        )
+
+        def _worker() -> None:
+            try:
+                processor.process_cycle(
+                    namd_run_no=namd_run_no,
+                    gomc_run_no=gomc_run_no,
+                )
+
+            except Exception as exc:
+                self._bg_error = exc
+
+        self._bg_thread = threading.Thread(
+            target=_worker,
+            name=(
+                f"otf_cycle_"
+                f"{gomc_run_no // 2}"
+            ),
+        )
+
+        self._bg_thread.start()
+
+        self.logger.info(
+            "[OTF] Background processing launched "
+            "for NAMD run %d and GOMC run %d",
+            namd_run_no,
+            gomc_run_no,
+        )
+    
+    def _wait_for_otf_worker(self) -> None:
+        thread = self._bg_thread
+
+        if thread is None:
+            return
+
+        thread.join()
+
+        self._bg_thread = None
+
+        cycle_pair = self._bg_cycle_pair
+        self._bg_cycle_pair = None
+
+        error = self._bg_error
+        self._bg_error = None
+
+        if error is not None:
+            self.logger.error(
+                "[OTF] Background processing failed "
+                "for cycle pair %s: %s",
+                cycle_pair,
+                error,
+            )
+
+            raise error
+
+        if cycle_pair is not None:
+            self._record_completed_cycle_pair(
+                *cycle_pair
+            )
+
+            self._apply_retention_policy()
+
+    def _join_otf_worker_for_teardown(
+            self,
+        ) -> None:
+            thread = self._bg_thread
+
+            if thread is None:
+                return
+
+            thread.join()
+
+            self._bg_thread = None
+
+            if self._bg_error is not None:
+                self.logger.warning(
+                    "[OTF] Background processing also "
+                    "failed during teardown: %s",
+                    self._bg_error,
+                )
+
+            self._bg_error = None
+            self._bg_cycle_pair = None
+
+    def _record_completed_cycle_pair(
+        self,
+        namd_run_no: int,
+        gomc_run_no: int,
+    ) -> None:
+        pair = (
+            self._fifo_step_id(
+                namd_run_no
+            ),
+            self._fifo_step_id(
+                gomc_run_no
+            ),
+        )
+
+        if pair not in self._retained_cycle_pairs:
+            self._retained_cycle_pairs.append(
+                pair
+            )
+    def _apply_retention_policy(self) -> None:
+        if self.disk_cleanup_mode == "off":
+            return
+
+        while (
+            len(self._retained_cycle_pairs)
+            > self.otf_keep_raw_cycles
+        ):
+            (
+                namd_step_id,
+                gomc_step_id,
+            ) = self._retained_cycle_pairs.pop(0)
+
+            self.fifo_store.release_step(
+                "NAMD",
+                namd_step_id,
+            )
+
+            self.fifo_store.release_step(
+                "GOMC",
+                gomc_step_id,
+            )
+
+            self.logger.info(
+                "[Cleanup] Released consumed "
+                "cycle pair NAMD=%s GOMC=%s",
+                namd_step_id,
+                gomc_step_id,
+            )
+
+    def _finalize_successful_artifact_cleanup(
+        self,
+    ) -> None:
+        if self.disk_cleanup_mode == "compact":
+            self.fifo_store.cleanup_all()
+            return
+
+        for engine in (
+            "NAMD",
+            "GOMC",
+        ):
+            cleanup_cache_dir = getattr(
+                self.fifo_store,
+                "cleanup_cache_dir",
+                None,
+            )
+
+            if callable(cleanup_cache_dir):
+                cleanup_cache_dir(engine)
+
+        self.logger.info(
+            "[Cleanup] Preserved managed runtime "
+            "artifacts in %s mode",
+            self.disk_cleanup_mode,
+        )
     def _mark_fifo_step_failure(self, engine: str, run_no: int) -> None:
         self.fifo_store.finalize_step_failure(engine, self._fifo_step_id(run_no))
 

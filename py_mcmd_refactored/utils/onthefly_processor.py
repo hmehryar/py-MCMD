@@ -389,7 +389,7 @@ def _append_dcd(
 class OnTheFlyProcessor:
     """
         Append newly parsed NAMD/GOMC rows to combined outputs per cycle.
-        
+
         processing
         trajectory handling
         artifact preservation
@@ -643,6 +643,13 @@ class OnTheFlyProcessor:
             "out.dat",
         )
 
+    def set_current_step(
+        self,
+        current_step: int,
+    ) -> None:
+        """Seed the global step offset when processing a restarted simulation."""
+        self._current_step = int(current_step)
+        
     # def process_cycle(
     #     self,
     #     namd_run_no: int,
