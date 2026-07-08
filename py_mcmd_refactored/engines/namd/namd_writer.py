@@ -103,59 +103,54 @@ def _build_parameter_files_block(
 # --- Step 5. compute run paths + read PDB lines (fresh vs restart) --------------
 from pathlib import Path
 import os
+import struct
 from typing import Tuple, Iterable, Dict
 
-# def _compute_run_paths_and_read_pdb_lines(
-#     python_file_directory: Path | str,
-#     gomc_newdir: Path | str,
-#     namd_box_x_newdir: Path,
-#     run_no: int,
-#     box_number: int,
-#     starting_pdb_box_x_file: Path | str,
-#     starting_psf_box_x_file: Path | str,
-# ) -> Tuple[Dict[str, str], Iterable[str]]:
-#     """
-#     Build placeholder replacements and load the PDB lines used to parse CRYST1.
 
-#     Returns:
-#       (replacements: dict[str,str], pdb_lines: list[str])
+def _read_cryst1_lines(pdb_path: Path) -> list:
+    """Read PDB file only until the CRYST1 line, then stop.
 
-#     Keys in replacements:
-#       - pdb_box_file, psf_box_file, coor_file, xsc_file, vel_file, Bool_restart
-#     """
-#     python_file_directory = Path(python_file_directory)
-#     gomc_newdir = Path(gomc_newdir)
+    _parse_cryst1() only needs the CRYST1 record -- for large systems
+    (N=1000+) reading the entire PDB file on every cycle adds measurable
+    overhead. Stopping at CRYST1 cuts the read to typically the first
+    1-2 lines of the file.
+    """
+    lines = []
+    with open(pdb_path, "r") as f:
+        for line in f:
+            lines.append(line)
+            if line.startswith("CRYST1"):
+                break
+    return lines
 
-#     if run_no != 0:
-#         # Restart: all inputs from GOMC restart files (relative to NAMD box dir)
-#         gomc_rel = os.path.relpath(str(gomc_newdir), str(namd_box_x_newdir))
-#         replacements = {
-#             "pdb_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.pdb",
-#             "psf_box_file": f"{gomc_rel}/Output_data_BOX_{box_number}_restart.psf",
-#             "coor_file":     f"{gomc_rel}/Output_data_BOX_{box_number}_restart.coor",
-#             "xsc_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.xsc",
-#             "vel_file":      f"{gomc_rel}/Output_data_BOX_{box_number}_restart.vel",
-#             "Bool_restart":  "true",
-#         }
-#         pdb_path = gomc_newdir / f"Output_data_BOX_{box_number}_restart.pdb"
-#         pdb_lines = pdb_path.read_text().splitlines(True)
-#     else:
-#         # Fresh run: use starting pdb/psf (resolved under python_file_directory)
-#         pdb_abs = python_file_directory / starting_pdb_box_x_file
-#         psf_abs = python_file_directory / starting_psf_box_x_file
-#         pdb_rel = os.path.relpath(str(pdb_abs), str(namd_box_x_newdir))
-#         psf_rel = os.path.relpath(str(psf_abs), str(namd_box_x_newdir))
-#         replacements = {
-#             "pdb_box_file": pdb_rel,
-#             "psf_box_file": psf_rel,
-#             "coor_file":    "NA",
-#             "xsc_file":     "NA",
-#             "vel_file":     "NA",
-#             "Bool_restart": "false",
-#         }
-#         pdb_lines = pdb_abs.read_text().splitlines(True)
 
-#     return replacements, pdb_lines
+def _vel_atom_count_matches_psf(vel_path: Path, psf_path: Path) -> bool:
+    """Return True only if both files exist AND have the same atom count.
+
+    For GEMC simulations, swap moves change the molecule count in each box
+    every cycle. If the .vel file atom count doesn't match the restart PSF,
+    using it would cause:
+        FATAL ERROR: Incorrect atom count in binary file
+    This check prevents that crash by falling back to Bool_restart=false
+    (NAMD regenerates velocities from temperature) whenever the counts differ.
+    """
+    if not vel_path.exists() or not psf_path.exists():
+        return False
+    try:
+        with open(vel_path, "rb") as vf:
+            vf.read(4)  # skip Fortran record marker
+            vel_natom = struct.unpack("<i", vf.read(4))[0]
+        with open(psf_path) as pf:
+            for line in pf:
+                if "!NATOM" in line:
+                    psf_natom = int(line.split()[0])
+                    break
+            else:
+                return False
+        return vel_natom == psf_natom
+    except Exception:
+        return False
+
 
 def _compute_run_paths_and_read_pdb_lines(
     python_file_directory: Path | str,
@@ -180,8 +175,10 @@ def _compute_run_paths_and_read_pdb_lines(
 
     if run_no != 0:
         # Restart from GOMC. Use the full binary restart only when GOMC
-        # produced a velocity restart file. Some GOMC configurations do
-        # not write .vel files.
+        # produced a velocity restart file AND its atom count matches the
+        # restart PSF. For GEMC, swap moves can change the molecule count
+        # each cycle, making the .vel atom count stale -- using a mismatched
+        # .vel causes "FATAL ERROR: Incorrect atom count in binary file".
         gomc_rel = os.path.relpath(
             str(gomc_newdir),
             str(namd_box_x_newdir),
@@ -199,7 +196,9 @@ def _compute_run_paths_and_read_pdb_lines(
             / f"Output_data_BOX_{box_number}_restart.vel"
         )
 
-        if vel_abs.exists():
+        if _vel_atom_count_matches_psf(vel_abs, psf_abs):
+            # Full binary restart: positions, box dims, and velocities all
+            # come from GOMC. Atom count validated -- safe to use .vel.
             replacements = {
                 "pdb_box_file": (
                     f"{gomc_rel}/"
@@ -224,9 +223,9 @@ def _compute_run_paths_and_read_pdb_lines(
                 "Bool_restart": "true",
             }
         else:
-            # Without a GOMC velocity restart file, use the restart PDB/PSF
-            # for coordinates and topology and let NAMD generate velocities
-            # from the configured simulation temperature.
+            # .vel missing, or atom count changed (GEMC swap moved molecules).
+            # Use restart PDB/PSF for coordinates and topology; let NAMD
+            # regenerate velocities from the configured temperature.
             pdb_rel = os.path.relpath(
                 str(pdb_abs),
                 str(namd_box_x_newdir),
@@ -245,7 +244,7 @@ def _compute_run_paths_and_read_pdb_lines(
                 "Bool_restart": "false",
             }
 
-        pdb_lines = pdb_abs.read_text().splitlines(True)
+        pdb_lines = _read_cryst1_lines(pdb_abs)
 
     else:
         # Fresh run: use starting pdb/psf (resolved under python_file_directory)
@@ -267,7 +266,7 @@ def _compute_run_paths_and_read_pdb_lines(
             "vel_file": "NA",
             "Bool_restart": "false",
         }
-        pdb_lines = pdb_abs.read_text().splitlines(True)
+        pdb_lines = _read_cryst1_lines(pdb_abs)
 
     return replacements, pdb_lines
 
