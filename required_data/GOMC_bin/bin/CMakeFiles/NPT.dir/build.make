@@ -1211,4 +1211,3 @@ CMakeFiles/NPT.dir/clean:
 CMakeFiles/NPT.dir/depend:
 	cd /home/ia5498/GOMC/bin && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/ia5498/GOMC /home/ia5498/GOMC /home/ia5498/GOMC/bin /home/ia5498/GOMC/bin /home/ia5498/GOMC/bin/CMakeFiles/NPT.dir/DependInfo.cmake "--color=$(COLOR)"
 .PHONY : CMakeFiles/NPT.dir/depend
-

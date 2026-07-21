@@ -597,7 +597,6 @@ path_namd_runs = "NAMD"
 os.makedirs(path_namd_runs, exist_ok=True)
 
 
-
 # H.Mehryar Commented out the GOMC folder creation, as it is not needed for the FIFO
 path_gomc_runs = "GOMC"
 os.makedirs(path_gomc_runs, exist_ok=True)
@@ -3271,7 +3270,7 @@ for run_no in range(starting_sims_namd_gomc, total_sims_namd_gomc):
 
         write_log_data = "Waiting for initial GOMC simulation to finish."
         log_template_file.write(str(write_log_data))
-        
+
         print(str(write_log_data))
         os.wait4(
             exec_gomc_run_command.pid, os.WSTOPPED
