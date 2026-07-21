@@ -1,16 +1,12 @@
-
-
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import hashlib
-
-
 
 # def _discover_managed_root(explicit_root: Optional[str | Path] = None) -> Path:
 #     if explicit_root is not None:
@@ -25,6 +21,7 @@ import hashlib
 #         return shm_root / "py_mcmd_refactored"
 
 #     return Path.cwd() / ".managed_outputs"
+
 
 def _discover_managed_root(explicit_root: Optional[str | Path] = None) -> Path:
     if explicit_root is not None:
@@ -149,7 +146,9 @@ class ManagedArtifactStore:
         eng, sid = self._key(engine, step_id)
         key = (eng, sid)
         if key in self._steps:
-            raise ValueError(f"Managed step already prepared for {eng} step {sid}")
+            raise ValueError(
+                f"Managed step already prepared for {eng} step {sid}"
+            )
 
         resources = StepResources(
             engine=eng,
@@ -173,7 +172,9 @@ class ManagedArtifactStore:
     def get_step(self, engine: str, step_id: str | int) -> StepResources:
         key = self._key(engine, step_id)
         if key not in self._steps:
-            raise KeyError(f"No managed resources registered for {key[0]} step {key[1]}")
+            raise KeyError(
+                f"No managed resources registered for {key[0]} step {key[1]}"
+            )
         return self._steps[key]
 
     def finalize_step_success(self, engine: str, step_id: str | int) -> None:
@@ -231,7 +232,6 @@ class ManagedArtifactStore:
             resources.step_id,
         )
 
-    
     def cache_dir(self, engine: str) -> Path:
         eng, _ = self._key(engine, "cache")
         path = self.managed_root / "_engine_cache" / eng
@@ -261,6 +261,7 @@ class ManagedArtifactStore:
 
 # backward-compatible alias
 
+
 class FifoStore:
     def __init__(self, **kwargs):
         if "disk_roots" in kwargs or "managed_root" in kwargs:
@@ -271,17 +272,18 @@ class FifoStore:
     def __getattr__(self, name):
         return getattr(self._impl, name)
 
+
 # keep the legacy FIFO test symbol available
 # the orchestrator only uses it as an import/type alias
 
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable, Mapping, Optional
 import logging
 import os
 import shutil
 import stat
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Mapping, Optional
 
 DualWritePathFactory = Callable[[str, str, str], Optional[Path]]
 
@@ -340,11 +342,15 @@ class LegacyFifoStore:
         except FileNotFoundError:
             pass
 
-    def prepare_step(self, engine: str, step_id: str | int) -> FifoStepResources:
+    def prepare_step(
+        self, engine: str, step_id: str | int
+    ) -> FifoStepResources:
         eng, sid = self._key(engine, step_id)
         key = (eng, sid)
         if key in self._steps:
-            raise ValueError(f"FIFO resources already prepared for {eng} step {sid}")
+            raise ValueError(
+                f"FIFO resources already prepared for {eng} step {sid}"
+            )
 
         step_dir = self.root_dir / eng / sid
         step_dir.mkdir(parents=True, exist_ok=True)
@@ -357,7 +363,9 @@ class LegacyFifoStore:
 
             dual_write_path = None
             if self.developer_mode and self.dual_write_path_factory is not None:
-                dual_write_path = self.dual_write_path_factory(eng, sid, basename)
+                dual_write_path = self.dual_write_path_factory(
+                    eng, sid, basename
+                )
                 if dual_write_path is not None:
                     dual_write_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -382,10 +390,14 @@ class LegacyFifoStore:
     def get_step(self, engine: str, step_id: str | int) -> FifoStepResources:
         key = self._key(engine, step_id)
         if key not in self._steps:
-            raise KeyError(f"No FIFO resources registered for {key[0]} step {key[1]}")
+            raise KeyError(
+                f"No FIFO resources registered for {key[0]} step {key[1]}"
+            )
         return self._steps[key]
 
-    def get_fifo_path(self, engine: str, step_id: str | int, basename: str) -> Path:
+    def get_fifo_path(
+        self, engine: str, step_id: str | int, basename: str
+    ) -> Path:
         resources = self.get_step(engine, step_id)
         return resources.endpoints[Path(basename).name].fifo_path
 
@@ -395,7 +407,7 @@ class LegacyFifoStore:
     def finalize_step_failure(self, engine: str, step_id: str | int) -> None:
         self.get_step(engine, step_id).status = "failed"
         self.cleanup_step(engine, step_id)
-    
+
     def release_step(self, engine: str, step_id: str | int) -> None:
         """Release legacy FIFO resources after consumers no longer need them."""
         self.cleanup_step(engine, step_id)
@@ -415,4 +427,3 @@ class LegacyFifoStore:
     def cleanup_all(self) -> None:
         for engine, step_id in list(self._steps.keys()):
             self.cleanup_step(engine, step_id)
-
