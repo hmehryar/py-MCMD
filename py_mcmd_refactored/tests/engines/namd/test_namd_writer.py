@@ -166,13 +166,14 @@ def test_compute_run_paths_and_read_pdb_lines_restart_with_vel_uses_binary_resta
     gomc = base / "GOMC"
     gomc.mkdir()
 
+    import struct
     (gomc / "Output_data_BOX_1_restart.pdb").write_text(
         "CRYST1   10 20 30 90 90 90\n"
     )
-    (gomc / "Output_data_BOX_1_restart.psf").write_text("PSF\n")
+    (gomc / "Output_data_BOX_1_restart.psf").write_text("1 !NATOM\n")
     (gomc / "Output_data_BOX_1_restart.coor").write_text("COOR\n")
     (gomc / "Output_data_BOX_1_restart.xsc").write_text("XSC\n")
-    (gomc / "Output_data_BOX_1_restart.vel").write_text("VEL\n")
+    (gomc / "Output_data_BOX_1_restart.vel").write_bytes(struct.pack("<i", 1) + b"\x00" * 24)
 
     repl, lines = _compute_run_paths_and_read_pdb_lines(
         python_file_directory=base,
@@ -469,14 +470,18 @@ def test_write_namd_conf_file_restart_with_vel_uses_binary_restart(
     # gomc = tmp_path / "GOMC"; gomc.mkdir()
     # (gomc / "Output_data_BOX_1_restart.pdb").write_text("CRYST1 10 20 30 90 90 90\n")
     # (tmp_path / "NAMD").mkdir()
+    import struct
     gomc = tmp_path / "GOMC"
     gomc.mkdir()
 
     (gomc / "Output_data_BOX_1_restart.pdb").write_text(
         "CRYST1 10 20 30 90 90 90\n"
     )
-    (gomc / "Output_data_BOX_1_restart.vel").write_text(
-        "VEL\n"
+    (gomc / "Output_data_BOX_1_restart.psf").write_text(
+        "1 !NATOM\n"
+    )
+    (gomc / "Output_data_BOX_1_restart.vel").write_bytes(
+        struct.pack("<i", 1) + b"\x00" * 24
     )
 
     (tmp_path / "NAMD").mkdir()

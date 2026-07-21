@@ -77,6 +77,34 @@ class SimulationConfig(BaseModel):
         description="Path to the catdcd binary used to combine DCD trajectory files.",
     )
 
+    catdcd_core: Optional[int] = Field(
+        default=None,
+        description=(
+            "CPU core ID to pin catdcd to (via taskset), so the per-cycle "
+            "DCD combine does not steal CPU from NAMD's compute threads. "
+            "Set this to a core OUTSIDE NAMD's range. For example, if NAMD "
+            "uses 8 cores (0-7), set catdcd_core to 8 to give catdcd its own "
+            "core. If null, catdcd runs without CPU pinning (default)."
+        ),
+    )
+
+    otf_reserved_cores: Optional[int] = Field(
+        default=None,
+        description=(
+            "Number of CPU cores to reserve for on-the-fly processing "
+            "(catdcd + parsing), kept separate from NAMD's cores. If set, "
+            "catdcd is pinned to the reserved core(s) just past NAMD's range."
+        ),
+    )
+
+    enable_cpu_affinity: StrictBool = Field(
+        default=False,
+        description=(
+            "Whether to pin the on-the-fly processing (catdcd) to a "
+            "dedicated CPU core so it does not compete with NAMD."
+        ),
+    )
+
     combine_namd_dcd_file: StrictBool = Field(
         default=True,
         description="Whether to combine NAMD DCD trajectory files on-the-fly.",

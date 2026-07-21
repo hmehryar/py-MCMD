@@ -9,6 +9,46 @@ import os
 from py_mcmd_refactored.config.models import SimulationConfig
 from py_mcmd_refactored.utils.path import format_cycle_id
 
+import struct
+
+def _update_pdb_with_namd_coor(pdb_in_path: Path, coor_bin_path: Path, pdb_out_path: Path) -> bool:
+    """Read big-endian NAMD .coor file and overwrite coordinates of ATOM/HETATM lines in a new PDB."""
+    try:
+        with open(coor_bin_path, "rb") as f:
+            header = f.read(4)
+            if not header:
+                raise ValueError(f"Empty NAMD coor file: {coor_bin_path}")
+            num_atoms = struct.unpack(">i", header)[0]
+            coors = []
+            for _ in range(num_atoms):
+                data = f.read(24)
+                if len(data) < 24:
+                    raise ValueError("Unexpected EOF in NAMD coor file")
+                x, y, z = struct.unpack(">ddd", data)
+                coors.append((x, y, z))
+    except Exception as e:
+        log.warning(
+            "[GOMC] Could not parse NAMD binary coordinates: %s. "
+            "Falling back to starting PDB coordinates.",
+            e,
+        )
+        return False
+
+    atom_idx = 0
+    with open(pdb_in_path, "r") as f_in, open(pdb_out_path, "w") as f_out:
+        for line in f_in:
+            if line.startswith("ATOM  ") or line.startswith("HETATM"):
+                if atom_idx < len(coors):
+                    x, y, z = coors[atom_idx]
+                    x_str = f"{x:8.3f}"
+                    y_str = f"{y:8.3f}"
+                    z_str = f"{z:8.3f}"
+                    line = line[:30] + x_str + y_str + z_str + line[54:]
+                    atom_idx += 1
+            f_out.write(line)
+
+    return True
+
 log = logging.getLogger(__name__)
 
 # ----------------------------- DTOs -----------------------------
@@ -289,7 +329,16 @@ def write_gomc_conf_file(
 
     # PDB/PSF for box 0: fresh vs restart
     if io.previous_gomc_dir is None:
-        pdb0_rel = _rel(python_dir / starts.starting_pdb_box_0_file, gomc_newdir)
+        pdb0_path = python_dir / starts.starting_pdb_box_0_file
+        if io.namd_box_0_dir is not None:
+            namd_coor = io.namd_box_0_dir / "namdOut.restart.coor"
+            if namd_coor.exists():
+                min_pdb_path = gomc_newdir / "NAMD_minimized_box_0.pdb"
+                success = _update_pdb_with_namd_coor(pdb0_path, namd_coor, min_pdb_path)
+                if success:
+                    pdb0_path = min_pdb_path
+
+        pdb0_rel = _rel(pdb0_path, gomc_newdir)
         psf0_rel = _rel(python_dir / starts.starting_psf_box_0_file, gomc_newdir)
         out = out.replace("pdb_file_box_0_file", pdb0_rel)
         out = out.replace("psf_file_box_0_file", psf0_rel)

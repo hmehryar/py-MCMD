@@ -138,7 +138,6 @@ def _vel_atom_count_matches_psf(vel_path: Path, psf_path: Path) -> bool:
         return False
     try:
         with open(vel_path, "rb") as vf:
-            vf.read(4)  # skip Fortran record marker
             vel_natom = struct.unpack("<i", vf.read(4))[0]
         with open(psf_path) as pf:
             for line in pf:

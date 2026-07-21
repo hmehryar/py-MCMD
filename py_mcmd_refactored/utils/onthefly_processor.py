@@ -321,12 +321,30 @@ def _parse_gomc_log(
         last_step,
     )
 
+# Module-level cache for which CPU core catdcd should be pinned to.
+# Set once by the processor based on NAMD's core count. catdcd is pinned
+# to a core OUTSIDE NAMD's range so it does not steal CPU from NAMD's
+# compute-bound threads -- this keeps NAMD fast (like the old code) while
+# still combining DCDs every cycle (crash-safe, unlike deferring to the end).
+_CATDCD_CORE: Optional[int] = None
+
+
+def _set_catdcd_core(core_id: Optional[int]) -> None:
+    global _CATDCD_CORE
+    _CATDCD_CORE = core_id
+
+
 def _append_dcd(
     catdcd_bin: str | Path,
     src_dcd: str | Path,
     dst_dcd: str | Path,
 ) -> bool:
-    """Append one DCD segment to a combined trajectory atomically."""
+    """Append one DCD segment to a combined trajectory atomically.
+
+    catdcd is pinned (via taskset) to a dedicated CPU core outside NAMD's
+    range when _CATDCD_CORE is set, so the combine step does not compete
+    with NAMD's compute-bound threads for CPU.
+    """
     src = Path(src_dcd)
     dst = Path(dst_dcd)
 
@@ -352,6 +370,14 @@ def _append_dcd(
         command.append(str(dst))
 
     command.append(str(src))
+
+    # Pin catdcd to its dedicated core (outside NAMD's range) if available.
+    # taskset is standard on Linux; if unavailable the command still runs
+    # normally, just without pinning.
+    if _CATDCD_CORE is not None:
+        import shutil as _shutil
+        if _shutil.which("taskset"):
+            command = ["taskset", "-c", str(_CATDCD_CORE)] + command
 
     try:
         result = subprocess.run(
@@ -432,6 +458,41 @@ class OnTheFlyProcessor:
             managed_root
         )
 
+        # Pin catdcd to the CPU core specified in the JSON (catdcd_core),
+        # so the per-cycle DCD combine does not steal CPU from NAMD's
+        # compute threads. Set catdcd_core in the JSON to a core OUTSIDE
+        # NAMD's range (e.g. NAMD uses cores 0-7, set catdcd_core=8).
+        # This keeps NAMD fast (like the old code) while still combining
+        # every cycle so partial data survives a crash.
+        try:
+            catdcd_core = getattr(cfg, "catdcd_core", None)
+            enable_affinity = bool(getattr(cfg, "enable_cpu_affinity", False))
+            reserved = getattr(cfg, "otf_reserved_cores", None)
+
+            chosen_core = None
+            if catdcd_core is not None:
+                # Explicit core ID takes priority
+                chosen_core = int(catdcd_core)
+            elif enable_affinity:
+                # Derive the core from NAMD's range + reserved offset
+                namd_cores = int(getattr(cfg, "no_core_box_0", 1)) + \
+                    int(getattr(cfg, "no_core_box_1", 0))
+                chosen_core = namd_cores  # first core past NAMD's range
+
+            if chosen_core is not None:
+                _set_catdcd_core(chosen_core)
+                logger.info(
+                    "[OnTheFly] catdcd pinned to core %d", chosen_core
+                )
+            else:
+                logger.info(
+                    "[OnTheFly] catdcd runs without CPU pinning."
+                )
+        except Exception as _exc:
+            logger.warning(
+                "[OnTheFly] Could not set catdcd CPU affinity: %s", _exc
+            )
+
         self.catdcd_bin = Path(
             getattr(
                 cfg,
@@ -457,7 +518,7 @@ class OnTheFlyProcessor:
                 "combine_gomc_dcd_file",
                 True,
             )
-        )
+        ) and self.sim_type != "GCMC"
 
         self._current_step = 0
 
